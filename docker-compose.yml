@@ -1,0 +1,49 @@
+services:
+  # 1. Database PostgreSQL
+  db:
+    image: postgres:15
+    container_name: cybershield-db
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: cybershield
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d cybershield"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. Redis để lưu Token/Session
+  redis:
+    image: redis:7-alpine
+    container_name: cybershield-redis
+    ports:
+      - "6379:6379"
+
+  # 3. Backend Spring Boot (Thư mục cybershield)
+  backend:
+    build: ./cybershield
+    container_name: cybershield-api
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/cybershield
+      SPRING_DATASOURCE_USERNAME: admin
+      SPRING_DATASOURCE_PASSWORD: password123
+      SPRING_DATA_REDIS_HOST: redis
+
+  # 4. Frontend (Thư mục frontend)
+  frontend:
+    build: ./frontend
+    container_name: cybershield-web
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
