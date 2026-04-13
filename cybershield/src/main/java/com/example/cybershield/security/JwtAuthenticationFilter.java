@@ -4,6 +4,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import io.jsonwebtoken.JwtException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -42,8 +43,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         // 3. Cắt chuỗi để lấy đúng phần Token (Bỏ chữ "Bearer " đi)
-        jwt = authHeader.substring(7);
-        username = jwtService.extractUsername(jwt);
+        jwt = authHeader.substring(7).trim();
+        if (jwt.isEmpty()) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+        try {
+            username = jwtService.extractUsername(jwt);
+        } catch (JwtException | IllegalArgumentException ex) {
+            SecurityContextHolder.clearContext();
+            filterChain.doFilter(request, response);
+            return;
+        }
 
         // 4. Nếu có username trong token và người dùng chưa được xác thực trong SecurityContext
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
@@ -67,7 +78,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 );
 
                 // 6. Lưu Authentication vào SecurityContext (Đánh dấu là đã đăng nhập thành công)
-                SecurityContextHolder.getContext().setAuthentication(authToken);
+                org.springframework.security.core.context.SecurityContext context = SecurityContextHolder.createEmptyContext();
+                context.setAuthentication(authToken);
+                SecurityContextHolder.setContext(context);
             }
         }
 

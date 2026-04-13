@@ -19,7 +19,12 @@ public class Scenario {
     private String difficulty; // Easy, Medium, Hard
 
     @Column(columnDefinition = "TEXT")
+    private String thumbnailUrl;
+
+    @Column(columnDefinition = "TEXT")
     private String description;
+
+    private Integer rewardExp;
 
     @OneToMany(mappedBy = "scenario", cascade = CascadeType.ALL)
     @OrderBy("stepOrder ASC")

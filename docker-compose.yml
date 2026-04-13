@@ -10,40 +10,50 @@ services:
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d cybershield"]
+      test: ["CMD", "pg_isready", "-U", "admin", "-d", "cybershield", "-h", "localhost"]
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - cybershield-net
+    volumes:
+      - db_data:/var/lib/postgresql/data
 
-  # 2. Redis để lưu Token/Session
+  # 2. pgAdmin (Công cụ quản lý PostgreSQL qua Web)
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: cybershield-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@cybershield.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80" # Truy cập pgAdmin tại http://localhost:5050
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - cybershield-net
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+  # 3. Redis (Lưu Token/Session)
   redis:
     image: redis:7-alpine
     container_name: cybershield-redis
     ports:
       - "6379:6379"
+    networks:
+      - cybershield-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
-  # 3. Backend Spring Boot (Thư mục cybershield)
-  backend:
-    build: ./cybershield
-    container_name: cybershield-api
-    ports:
-      - "8080:8080"
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_started
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/cybershield
-      SPRING_DATASOURCE_USERNAME: admin
-      SPRING_DATASOURCE_PASSWORD: password123
-      SPRING_DATA_REDIS_HOST: redis
+networks:
+  cybershield-net:
+    driver: bridge
 
-  # 4. Frontend (Thư mục frontend)
-  frontend:
-    build: ./frontend
-    container_name: cybershield-web
-    ports:
-      - "3000:80"
-    depends_on:
-      - backend
+volumes:
+  db_data:
+  pgadmin_data:
