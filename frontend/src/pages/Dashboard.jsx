@@ -11,7 +11,7 @@ export default function Dashboard() {
 
   const handleLogout = useCallback(async () => {
     try {
-      if (localStorage.getItem(TOKEN_KEY)) {
+      if (sessionStorage.getItem(TOKEN_KEY)) {
         await authService.logout()
       }
     } catch (_error) {

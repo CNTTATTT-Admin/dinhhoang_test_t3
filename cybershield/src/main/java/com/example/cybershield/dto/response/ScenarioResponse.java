@@ -12,13 +12,18 @@ public record ScenarioResponse(
         String thumbnailUrl,
         String description,
         int rewardExp,
-        boolean isLocked
+        boolean isLocked,
+        boolean isCompleted
 ) {
     public static ScenarioResponse fromEntity(Scenario entity) {
-        return fromEntity(entity, false);
+        return fromEntity(entity, false, false);
     }
 
     public static ScenarioResponse fromEntity(Scenario entity, boolean isLocked) {
+        return fromEntity(entity, isLocked, false);
+    }
+
+    public static ScenarioResponse fromEntity(Scenario entity, boolean isLocked, boolean isCompleted) {
         return new ScenarioResponse(
                 entity.getId(),
                 entity.getTitle(),
@@ -27,7 +32,8 @@ public record ScenarioResponse(
                 entity.getThumbnailUrl(),
                 entity.getDescription(),
                 entity.getRewardExp() == null ? 300 : entity.getRewardExp(),
-                isLocked
+                isLocked,
+                isCompleted
         );
     }
 }

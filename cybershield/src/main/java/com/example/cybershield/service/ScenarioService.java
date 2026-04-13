@@ -108,8 +108,9 @@ public class ScenarioService {
         for (int i = 0; i < orderedScenarios.size(); i++) {
             Scenario scenario = orderedScenarios.get(i);
             boolean unlocked = i == 0 || previousCompleted;
-            responses.add(ScenarioResponse.fromEntity(scenario, !unlocked));
-            previousCompleted = completedScenarioIds.contains(scenario.getId());
+            boolean isCompleted = completedScenarioIds.contains(scenario.getId());
+            responses.add(ScenarioResponse.fromEntity(scenario, !unlocked, isCompleted));
+            previousCompleted = isCompleted;
         }
         return responses;
     }

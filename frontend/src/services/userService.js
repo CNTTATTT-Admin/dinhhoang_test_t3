@@ -18,3 +18,7 @@ export function changePassword(id, oldPassword, newPassword) {
   return axiosClient.put(`/users/${id}/password`, { oldPassword, newPassword })
 }
 
+export function getUserAnalytics(id) {
+  return axiosClient.get(`/users/${id}/analytics`)
+}
+

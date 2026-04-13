@@ -2,6 +2,7 @@ package com.example.cybershield.controller;
 
 import com.example.cybershield.dto.request.ChangePasswordRequest;
 import com.example.cybershield.dto.request.UpdateProfileRequest;
+import com.example.cybershield.dto.response.UserAnalyticsResponse;
 import com.example.cybershield.dto.response.UserProfileResponse;
 import com.example.cybershield.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,12 @@ public class UserController {
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     public ResponseEntity<UserProfileResponse> getUserProfile(@PathVariable UUID id) {
         return ResponseEntity.ok(userService.getUserProfile(id));
+    }
+
+    @GetMapping("/{id}/analytics")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    public ResponseEntity<UserAnalyticsResponse> getUserAnalytics(@PathVariable UUID id) {
+        return ResponseEntity.ok(userService.getUserAnalytics(id));
     }
 
     // Tương tự, cần đăng nhập để cập nhật avatar

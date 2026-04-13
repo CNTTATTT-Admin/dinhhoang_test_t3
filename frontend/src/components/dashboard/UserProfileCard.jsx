@@ -14,6 +14,8 @@ export default function UserProfileCard({
   nextBadge = null,
   rankProgress = { pct: 0, expFrom: 0, expTo: null },
   sortedBadges = [],
+  campaignProgress = { completed: 0, total: 5 },
+  showStats = true,
 }) {
   const rawExp = userProfile?.totalExp
   const totalExp = Math.max(0, Number(rawExp) || 0)
@@ -161,7 +163,7 @@ export default function UserProfileCard({
             </>
           )}
 
-          {isLoading ? (
+          {isLoading && showStats ? (
             <div className="mt-6 grid grid-cols-3 gap-3">
               {Array.from({ length: 3 }).map((_, i) => (
                 <div
@@ -170,13 +172,19 @@ export default function UserProfileCard({
                 />
               ))}
             </div>
-          ) : (
+          ) : null}
+
+          {!isLoading && showStats ? (
             <UserStats
               trapClicks={userProfile?.trapClicks}
               correctReports={userProfile?.correctReports}
               avgResponseTime={userProfile?.avgResponseTime}
+              totalExp={totalExp}
+              level={displayLevel}
+              completedCampaigns={campaignProgress.completed}
+              totalCampaigns={campaignProgress.total}
             />
-          )}
+          ) : null}
         </div>
       </div>
     </section>
