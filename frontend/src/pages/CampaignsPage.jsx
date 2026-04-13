@@ -91,7 +91,7 @@ export default function CampaignsPage() {
     }
   }, [])
 
-  const hasToken = !!localStorage.getItem(TOKEN_KEY)
+  const hasToken = !!sessionStorage.getItem(TOKEN_KEY)
 
   const filteredScenarios = useMemo(() => {
     const q = query.trim().toLowerCase()

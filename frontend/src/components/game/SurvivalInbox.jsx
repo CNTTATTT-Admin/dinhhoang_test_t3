@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   AlertTriangle,
@@ -432,6 +432,7 @@ export default function SurvivalInbox() {
   const [queue, setQueue] = useState([])
   const [index, setIndex] = useState(0)
   const [score, setScore] = useState(0)
+  const scoreRef = useRef(0)
   const [status, setStatus] = useState('PLAYING')
   const [senderTooltipOpen, setSenderTooltipOpen] = useState(false)
   const [hoveredUrl, setHoveredUrl] = useState('')
@@ -485,6 +486,7 @@ export default function SurvivalInbox() {
       setQueue(buildQueueBySession(foundLesson, foundScenario?.title || 'CyberShield'))
       setIndex(0)
       setScore(0)
+      scoreRef.current = 0
       setStatus('PLAYING')
       setGameOverEmail(null)
       setDecisionHistory([])
@@ -515,7 +517,7 @@ export default function SurvivalInbox() {
         setIsSubmittingResult(true)
         const timeTakenSeconds = Math.max(1, Math.round((Date.now() - startedAtMs) / 1000))
         const payload = {
-          finalScore: score,
+          finalScore: scoreRef.current,
           timeTakenSeconds,
           emailDecisions: decisionHistory.map((decision) => ({
             emailId: decision.emailId,
@@ -529,7 +531,7 @@ export default function SurvivalInbox() {
         setDebrief({
           ...data,
           timeTakenSeconds,
-          finalScore: score,
+          finalScore: scoreRef.current,
         })
       } catch (err) {
         // eslint-disable-next-line no-console
@@ -544,7 +546,7 @@ export default function SurvivalInbox() {
               'Không thể gửi báo cáo mission lên hệ thống.',
           ],
           timeTakenSeconds: Math.max(1, Math.round((Date.now() - startedAtMs) / 1000)),
-          finalScore: score,
+          finalScore: scoreRef.current,
         })
       } finally {
         setIsSubmittingResult(false)
@@ -600,11 +602,16 @@ export default function SurvivalInbox() {
         }
 
         const correct = (isReport && currentEmail?.isPhishing) || (!isReport && !currentEmail?.isPhishing)
-        setScore((prev) => Math.max(0, prev + (correct ? SCORE_CORRECT : -SCORE_FALSE_REPORT)))
+        const nextScore = scoreRef.current + (correct ? SCORE_CORRECT : -SCORE_FALSE_REPORT)
+        scoreRef.current = nextScore
+        setScore(nextScore)
 
         const nextIndex = index + 1
         if (nextIndex >= queue.length) {
-          setStatus('VICTORY')
+          setStatus(nextScore < 0 ? 'GAME_OVER' : 'VICTORY')
+          if (nextScore < 0) {
+            setGameOverEmail(null)
+          }
           setIsFinished(true)
         } else {
           setIndex(nextIndex)

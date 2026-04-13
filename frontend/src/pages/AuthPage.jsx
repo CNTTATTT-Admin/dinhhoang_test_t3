@@ -179,13 +179,13 @@ export default function AuthPage() {
 
   const persistAuth = (data) => {
     if (data?.token) {
-      localStorage.setItem(TOKEN_KEY, data.token)
+      sessionStorage.setItem(TOKEN_KEY, data.token)
     }
     if (data?.username) {
-      localStorage.setItem('cybershield_username', data.username)
+      sessionStorage.setItem('cybershield_username', data.username)
     }
     if (data?.role) {
-      localStorage.setItem('cybershield_role', data.role)
+      sessionStorage.setItem('cybershield_role', data.role)
     }
 
     // Try to persist userId (UUID) for endpoints under `/api/users/{id}/...`
@@ -212,7 +212,7 @@ export default function AuthPage() {
     }
 
     if (looksLikeUuid(candidateUserId)) {
-      localStorage.setItem('userId', candidateUserId)
+      sessionStorage.setItem('userId', candidateUserId)
     }
   }
 
@@ -239,13 +239,13 @@ export default function AuthPage() {
       const token =
         responseData?.token || responseData?.data?.token || responseData?.jwt
       if (token) {
-        localStorage.setItem(TOKEN_KEY, token)
+        sessionStorage.setItem(TOKEN_KEY, token)
       }
 
       // 2) Tách UUID/userId an toàn (nếu API trả về)
       const userId = responseData?.id || responseData?.user?.id
       if (userId) {
-        localStorage.setItem('userId', userId)
+        sessionStorage.setItem('userId', userId)
       } else {
         // Không crash app nếu backend không trả UUID
         console.warn('Chưa lấy được userId từ API Login')

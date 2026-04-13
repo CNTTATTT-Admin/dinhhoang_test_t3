@@ -62,7 +62,7 @@ public class GameplayService {
         session.setStartedAt(LocalDateTime.now().minusSeconds(Math.max(1, request.timeTakenSeconds())));
 
         session.setEndedAt(LocalDateTime.now());
-        session.setScoreGained(Math.max(0, request.finalScore()));
+        session.setScoreGained(request.finalScore());
         session.setStatus("IN_PROGRESS");
         trainingSessionRepository.save(session);
 
@@ -102,7 +102,7 @@ public class GameplayService {
             sessionDetailRepository.save(detail);
         }
 
-        boolean passed = falseNegative == 0 && session.getScoreGained() >= 100;
+        boolean passed = falseNegative == 0 && session.getScoreGained() >= 0;
         session.setStatus(passed ? "COMPLETED" : "FAILED");
         trainingSessionRepository.save(session);
 
@@ -116,27 +116,36 @@ public class GameplayService {
                     return p;
                 });
 
-        int reached = passed ? currentStep.getStepOrder() : Math.max(1, progress.getHighestStepReached());
+        int previousHighestStep = Math.max(0, progress.getHighestStepReached());
+        int reached = passed ? currentStep.getStepOrder() : Math.max(1, previousHighestStep);
         progress.setHighestStepReached(Math.max(progress.getHighestStepReached(), reached));
         progress.setBestScore(Math.max(progress.getBestScore(), session.getScoreGained()));
 
         int earnedExp = 0;
+        if (passed && currentStep.getStepOrder() > previousHighestStep) {
+            int totalRewardExp = scenario.getRewardExp() == null ? 300 : Math.max(0, scenario.getRewardExp());
+            int stepCount = Math.max(1, scenarioStepCount);
+            int baseStepExp = totalRewardExp / stepCount;
+            int remainder = totalRewardExp % stepCount;
+            // Dồn phần dư vào step cuối để đảm bảo tổng EXP nhận đủ rewardExp của scenario.
+            int stepRewardExp = baseStepExp + (currentStep.getStepOrder() >= stepCount ? remainder : 0);
+            earnedExp += Math.max(0, stepRewardExp);
+        }
+
         boolean completedCurrentSession = passed && currentStep.getStepOrder() >= scenarioStepCount;
         if (completedCurrentSession) {
             boolean completedBefore = progress.isScenarioCompleted();
             progress.setScenarioCompleted(true);
-            long completedCount = trainingSessionRepository.countByUserIdAndScenarioIdAndStatus(
-                    user.getId(),
-                    scenario.getId(),
-                    "COMPLETED"
-            );
-            if (!completedBefore && completedCount == 1) {
-                int rewardExp = scenario.getRewardExp() == null ? 300 : Math.max(0, scenario.getRewardExp());
-                earnedExp = rewardExp;
-                user.setTotalExp(user.getTotalExp() + rewardExp);
-                user.setLevel(calculateLevelFromExp(user.getTotalExp()));
-                userRepository.save(user);
+            if (completedBefore) {
+                // Replay step cuối sau khi đã clear campaign trước đó không được nhận thêm EXP.
+                earnedExp = 0;
             }
+        }
+
+        if (earnedExp > 0) {
+            user.setTotalExp(user.getTotalExp() + earnedExp);
+            user.setLevel(calculateLevelFromExp(user.getTotalExp()));
+            userRepository.save(user);
         }
 
         progressRepository.save(progress);

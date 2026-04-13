@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Settings } from 'lucide-react'
 import Header from '../components/layout/Header.jsx'
 import Footer from '../components/layout/Footer.jsx'
 import SettingsTab from '../components/dashboard/SettingsTab.jsx'
 import UserProfileCard from '../components/dashboard/UserProfileCard.jsx'
+import UserStats from '../components/dashboard/UserStats.jsx'
 import { TOKEN_KEY } from '../utils/axiosClient.js'
 import * as badgeService from '../services/badgeService.js'
+import * as scenarioService from '../services/scenarioService.js'
 import * as userService from '../services/userService.js'
 import {
   getCurrentBadgeForExp,
@@ -202,7 +205,11 @@ function ModeCard({
   )
 }
 
-function GameModesPanel({ onStartEndless, isDisabled }) {
+function GameModesPanel({ onStartEndless, isDisabled, completedCampaigns, totalCampaigns }) {
+  const readyToUnlockModes = totalCampaigns > 0 && completedCampaigns >= totalCampaigns
+  const lockLabel = `Cần hoàn thành ${totalCampaigns}/${totalCampaigns} chiến dịch (hiện tại ${completedCampaigns}/${totalCampaigns})`
+  const shouldLockModes = isDisabled || !readyToUnlockModes
+
   return (
     <div className="grid gap-4 md:grid-cols-2">
       <ModeCard
@@ -212,7 +219,8 @@ function GameModesPanel({ onStartEndless, isDisabled }) {
         description="Thử thách giới hạn phản xạ. Emails sẽ gửi đến liên tục với tốc độ tăng dần. Đừng để bị lừa!"
         buttonLabel="Vào Sinh Tồn"
         onClick={onStartEndless}
-        disabled={isDisabled}
+        disabled={shouldLockModes}
+        badge={shouldLockModes ? lockLabel : 'Đã mở khóa'}
         icon={
           <svg
             width="24"
@@ -255,8 +263,8 @@ function GameModesPanel({ onStartEndless, isDisabled }) {
         description="So tài cùng người chơi khác. Ai nhận diện Phishing nhanh và chính xác hơn sẽ giành chiến thắng."
         buttonLabel="Tìm Đối Thủ"
         onClick={() => {}}
-        disabled={true}
-        badge="Coming Soon"
+        disabled={shouldLockModes}
+        badge={shouldLockModes ? lockLabel : 'Đã mở khóa'}
         icon={
           <svg
             width="24"
@@ -297,10 +305,12 @@ function GameModesPanel({ onStartEndless, isDisabled }) {
 }
 
 export default function UserDashboard({ onLogout }) {
-  const [activeTab, setActiveTab] = useState('missions')
+  const [activeTab, setActiveTab] = useState('playModes')
   const [isLoadingProfile, setIsLoadingProfile] = useState(true)
   const [userProfile, setUserProfile] = useState(null)
+  const [analytics, setAnalytics] = useState(null)
   const [badges, setBadges] = useState([])
+  const [campaignProgress, setCampaignProgress] = useState({ completed: 0, total: 5 })
   const [fetchError, setFetchError] = useState('')
 
   const [toast, setToast] = useState(null)
@@ -309,11 +319,11 @@ export default function UserDashboard({ onLogout }) {
   }, [])
 
   const navigate = useNavigate()
-  const userId = useMemo(() => localStorage.getItem('userId'), [])
+  const userId = useMemo(() => sessionStorage.getItem('userId'), [])
 
   const handleMissingUserId = useCallback(() => {
-    localStorage.removeItem('userId')
-    localStorage.removeItem(TOKEN_KEY)
+    sessionStorage.removeItem('userId')
+    sessionStorage.removeItem(TOKEN_KEY)
     onLogout?.()
     navigate('/login', { replace: true })
   }, [navigate, onLogout])
@@ -331,20 +341,31 @@ export default function UserDashboard({ onLogout }) {
         setIsLoadingProfile(true)
         setFetchError('')
 
-        const [profileRes, badgesRes] = await Promise.all([
+        const [profileRes, badgesRes, scenariosRes, analyticsRes] = await Promise.all([
           userService.getUserProfile(userId),
           badgeService.getBadges().catch(() => ({ data: [] })),
+          scenarioService.getScenarios().catch(() => ({ data: [] })),
+          userService.getUserAnalytics(userId).catch(() => ({ data: null })),
         ])
         if (!alive) return
         setUserProfile(profileRes.data)
         const list = badgesRes?.data
         setBadges(Array.isArray(list) ? list : [])
+        const scenarios = Array.isArray(scenariosRes?.data) ? scenariosRes.data : []
+        const completed = scenarios.filter((s) => Boolean(s?.isCompleted)).length
+        setAnalytics(analyticsRes?.data ?? null)
+        setCampaignProgress({
+          completed,
+          total: scenarios.length || 5,
+        })
       } catch (err) {
         if (!alive) return
         const msg = getErrorMessage(err)
         setFetchError(msg)
         setUserProfile(null)
+        setAnalytics(null)
         setBadges([])
+        setCampaignProgress({ completed: 0, total: 5 })
       } finally {
         if (alive) setIsLoadingProfile(false)
       }
@@ -412,6 +433,7 @@ export default function UserDashboard({ onLogout }) {
   )
 
   const [isUpdatingAvatarUrl, setIsUpdatingAvatarUrl] = useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const handleUpdateAvatarUrl = useCallback(
     async (avatarUrl) => {
       setIsUpdatingAvatarUrl(true)
@@ -444,7 +466,7 @@ export default function UserDashboard({ onLogout }) {
   }, [navigate])
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-900 text-white">
+    <div className="min-h-screen bg-[#0B1120] text-slate-200 flex flex-col">
       <Header variant="user" onLogout={onLogout} />
 
       <main className="mx-auto w-full max-w-7xl flex-grow px-4 py-10 sm:px-6 lg:px-8">
@@ -458,6 +480,8 @@ export default function UserDashboard({ onLogout }) {
               nextBadge={rankInfo.nextBadge}
               rankProgress={rankInfo.rankProgress}
               sortedBadges={sortedBadges}
+              campaignProgress={campaignProgress}
+              showStats={false}
             />
 
             {fetchError ? (
@@ -469,31 +493,42 @@ export default function UserDashboard({ onLogout }) {
 
           <section className="space-y-4">
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-md">
-              <div className="flex gap-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('playModes')}
+                    className={[
+                      'rounded-xl px-3 py-2 text-sm font-semibold transition',
+                      activeTab === 'playModes'
+                        ? 'bg-gradient-to-r from-cyan-600 to-violet-600 text-white shadow-[0_0_18px_rgba(34,211,238,0.18)]'
+                        : 'bg-slate-900/30 text-slate-200 hover:bg-white/5',
+                    ].join(' ')}
+                    disabled={isDisabled}
+                  >
+                    Chế độ chơi
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('fiveStats')}
+                    className={[
+                      'rounded-xl px-3 py-2 text-sm font-semibold transition',
+                      activeTab === 'fiveStats'
+                        ? 'bg-gradient-to-r from-cyan-600 to-violet-600 text-white shadow-[0_0_18px_rgba(34,211,238,0.18)]'
+                        : 'bg-slate-900/30 text-slate-200 hover:bg-white/5',
+                    ].join(' ')}
+                    disabled={isDisabled}
+                  >
+                    Ngũ đại thông số
+                  </button>
+                </div>
                 <button
                   type="button"
-                  onClick={() => setActiveTab('missions')}
-                  className={[
-                    'flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition',
-                    activeTab === 'missions'
-                      ? 'bg-gradient-to-r from-cyan-600 to-violet-600 text-white shadow-[0_0_18px_rgba(34,211,238,0.18)]'
-                      : 'bg-slate-900/30 text-slate-200 hover:bg-white/5',
-                  ].join(' ')}
+                  onClick={() => setIsSettingsOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900/30 px-3 py-2 text-sm font-semibold text-slate-200 transition hover:border-cyan-400/30 hover:text-cyan-100"
                   disabled={isDisabled}
                 >
-                  Nhiệm vụ
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('settings')}
-                  className={[
-                    'flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition',
-                    activeTab === 'settings'
-                      ? 'bg-gradient-to-r from-cyan-600 to-violet-600 text-white shadow-[0_0_18px_rgba(139,92,246,0.18)]'
-                      : 'bg-slate-900/30 text-slate-200 hover:bg-white/5',
-                  ].join(' ')}
-                  disabled={isDisabled}
-                >
+                  <Settings className="h-4 w-4" />
                   Cài đặt
                 </button>
               </div>
@@ -513,18 +548,25 @@ export default function UserDashboard({ onLogout }) {
               </div>
             ) : null}
 
-            {activeTab === 'missions' && !isLoadingProfile ? (
-              <GameModesPanel onStartEndless={handleStartEndless} isDisabled={isDisabled} />
+            {!isLoadingProfile && activeTab === 'playModes' ? (
+              <GameModesPanel
+                onStartEndless={handleStartEndless}
+                isDisabled={isDisabled}
+                completedCampaigns={campaignProgress.completed}
+                totalCampaigns={campaignProgress.total}
+              />
             ) : null}
 
-            {activeTab === 'settings' && !isLoadingProfile ? (
-              <SettingsTab
-                disabled={isDisabled}
-                isChangingPassword={isChangingPassword}
-                isUpdatingAvatarUrl={isUpdatingAvatarUrl}
-                onChangePassword={handleChangePassword}
-                onUpdateAvatarUrl={handleUpdateAvatarUrl}
-                notify={notify}
+            {!isLoadingProfile && activeTab === 'fiveStats' ? (
+              <UserStats
+                trapClicks={userProfile?.trapClicks}
+                correctReports={userProfile?.correctReports}
+                avgResponseTime={userProfile?.avgResponseTime}
+                totalExp={userProfile?.totalExp}
+                level={userProfile?.level}
+                completedCampaigns={campaignProgress.completed}
+                totalCampaigns={campaignProgress.total}
+                analytics={analytics}
               />
             ) : null}
           </section>
@@ -582,6 +624,24 @@ export default function UserDashboard({ onLogout }) {
           key={toast.id}
         />
       ) : null}
+
+      <Modal
+        open={isSettingsOpen}
+        title="Cai dat tai khoan"
+        onClose={() => {
+          if (isChangingPassword || isUpdatingAvatarUrl) return
+          setIsSettingsOpen(false)
+        }}
+      >
+        <SettingsTab
+          disabled={isDisabled}
+          isChangingPassword={isChangingPassword}
+          isUpdatingAvatarUrl={isUpdatingAvatarUrl}
+          onChangePassword={handleChangePassword}
+          onUpdateAvatarUrl={handleUpdateAvatarUrl}
+          notify={notify}
+        />
+      </Modal>
     </div>
   )
 }

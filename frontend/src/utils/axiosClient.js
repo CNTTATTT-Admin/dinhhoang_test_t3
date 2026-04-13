@@ -5,7 +5,7 @@ const TOKEN_KEYS = [TOKEN_KEY, 'jwt', 'accessToken']
 
 function resolveStoredToken() {
   for (const key of TOKEN_KEYS) {
-    const value = localStorage.getItem(key)
+    const value = sessionStorage.getItem(key)
     if (value && value.trim()) {
       return value
     }
@@ -14,12 +14,12 @@ function resolveStoredToken() {
 }
 
 function clearAuthStorage() {
-  localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem('jwt')
-  localStorage.removeItem('accessToken')
-  localStorage.removeItem('userId')
-  localStorage.removeItem('cybershield_username')
-  localStorage.removeItem('cybershield_role')
+  sessionStorage.removeItem(TOKEN_KEY)
+  sessionStorage.removeItem('jwt')
+  sessionStorage.removeItem('accessToken')
+  sessionStorage.removeItem('userId')
+  sessionStorage.removeItem('cybershield_username')
+  sessionStorage.removeItem('cybershield_role')
 }
 
 const axiosClient = axios.create({
