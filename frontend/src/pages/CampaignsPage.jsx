@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   AlertTriangle,
@@ -10,7 +10,8 @@ import {
 } from 'lucide-react'
 import PageShell from '../components/layout/PageShell.jsx'
 import * as scenarioService from '../services/scenarioService.js'
-import { TOKEN_KEY } from '../utils/axiosClient.js'
+import * as authService from '../services/authService.js'
+import { TOKEN_KEY, clearAuthStorage, resolveStoredToken } from '../utils/axiosClient.js'
 
 function difficultyBadge(level) {
   if ((level || '').toLowerCase() === 'easy') {
@@ -92,6 +93,18 @@ export default function CampaignsPage() {
   }, [])
 
   const hasToken = !!sessionStorage.getItem(TOKEN_KEY)
+  const handleLogout = useCallback(async () => {
+    try {
+      if (resolveStoredToken()) {
+        await authService.logout()
+      }
+    } catch {
+      // Server logout can fail on expired token; still clear client auth state.
+    } finally {
+      clearAuthStorage()
+      navigate('/login', { replace: true })
+    }
+  }, [navigate])
 
   const filteredScenarios = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -132,7 +145,10 @@ export default function CampaignsPage() {
   }, [completedCount, totalCount])
 
   return (
-    <PageShell headerVariant={hasToken ? 'user' : 'guest'}>
+    <PageShell
+      headerVariant={hasToken ? 'user' : 'guest'}
+      onLogout={hasToken ? handleLogout : undefined}
+    >
       <main className="flex-grow bg-[#0B1120]">
         <div className="max-w-7xl mx-auto px-6 md:px-12 py-6 flex flex-col flex-grow bg-[#0B1120]">
           <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900/40 p-4 backdrop-blur-md shadow-[0_0_55px_rgba(0,0,0,0.35)] sm:p-5">

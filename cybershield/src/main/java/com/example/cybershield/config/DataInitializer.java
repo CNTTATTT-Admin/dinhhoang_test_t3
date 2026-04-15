@@ -129,9 +129,17 @@ public class DataInitializer implements CommandLineRunner {
 
         upsertStep(scenarios.get(0), 1, "MAIL", "{\"scenarioType\":\"MAIL_STANDARD\",\"title\":\"MAIL co ban\",\"threatLevel\":1}", "CLICK_LINK", "REPORT", "Flow MAIL");
         upsertStep(scenarios.get(1), 1, "MAIL", "{\"scenarioType\":\"MAIL_FILE\",\"title\":\"MAIL + FILE\",\"threatLevel\":2}", "CLICK_LINK", "REPORT", "Flow MAIL+FILE");
-        ScenarioStep webStep = upsertStep(scenarios.get(2), 1, "WEB_PAGE", "{\"scenarioType\":\"MAIL_WEB\",\"title\":\"MAIL + WEB\",\"traps\":{\"browser\":{\"enabled\":true,\"title\":\"Microsoft 365 Security Check\",\"displayUrl\":\"https://login.microsoftonline.com-security-check.com/verify\",\"actualUrl\":\"https://login.microsoftonline.com-security-check.com/verify\",\"formType\":\"CREDENTIAL\"}},\"threatLevel\":3}", "INPUT", "REPORT", "Flow MAIL+WEB");
+        ScenarioStep webStep = upsertStep(
+                scenarios.get(2),
+                1,
+                "WEB_PAGE",
+                "{\"scenarioType\":\"MAIL_WEB\",\"title\":\"MAIL + WEB\",\"traps\":{\"browser\":{\"enabled\":true,\"webType\":\"MICROSOFT\",\"title\":\"Microsoft 365 Security Check\",\"displayUrl\":\"https://login.microsoftonline.com-security-check.com/verify\",\"actualUrl\":\"https://login.microsoftonline.com-security-check.com/verify\",\"formType\":\"CREDENTIAL\"}},\"threatLevel\":3,\"webTypePlaybook\":[{\"webType\":\"FACEBOOK\",\"displayUrl\":\"https://facebook.com/login\"},{\"webType\":\"GOOGLE\",\"displayUrl\":\"https://accounts.google.com/signin\"},{\"webType\":\"MICROSOFT\",\"displayUrl\":\"https://login.microsoftonline.com\"},{\"webType\":\"GITHUB\",\"displayUrl\":\"https://github.com/login\"},{\"webType\":\"FINANCE\",\"displayUrl\":\"https://finance.cybershield.internal\"}]}",
+                "INPUT",
+                "REPORT",
+                "Flow MAIL+WEB"
+        );
         landingPageRepository.save(buildLanding(webStep, scenarios.get(2).getTitle()));
-        upsertStep(scenarios.get(3), 1, "MAIL_OTP", "{\"scenarioType\":\"MAIL_OTP\",\"otpCode\":\"123456\",\"title\":\"MAIL + OTP\",\"message\":\"OTP hien thi trong email.\",\"threatLevel\":4}", "INPUT", "REPORT", "Flow MAIL+OTP");
+        upsertStep(scenarios.get(3), 1, "MAIL_OTP", "{\"scenarioType\":\"MAIL_OTP\",\"title\":\"MAIL + OTP\",\"message\":\"Ma OTP do thiet bi Preview sinh ngau nhien; khong luu ma co dinh trong DB.\",\"threatLevel\":4}", "INPUT", "REPORT", "Flow MAIL+OTP");
         upsertStep(scenarios.get(4), 1, "ZALO", "{\"scenarioType\":\"MAIL_ZALO\",\"title\":\"MAIL + ZALO\",\"sender\":\"IT Helpdesk Clone\",\"messages\":[{\"sender\":\"IT Helpdesk Clone\",\"text\":\"Check mail va duyet gap giup anh.\"}],\"threatLevel\":5}", "INPUT", "REPORT", "Flow MAIL+ZALO");
     }
 
@@ -192,6 +200,38 @@ public class DataInitializer implements CommandLineRunner {
                     "Thong bao lich dao tao noi bo. Khong can tai them tep nao.",
                     "https://intranet.cybershield.internal/training",
                     "Mo intranet",
+                    null,
+                    List.of()
+            ));
+            return emails;
+        }
+
+        if (content.contains("\"scenarioType\":\"MAIL_OTP\"")) {
+            emails.add(buildInboxEmail(
+                    step,
+                    1,
+                    "PHISH",
+                    true,
+                    "security-noreply@bank-verify-support.net",
+                    "Bank Security",
+                    "[Khan] Ma OTP xac minh giao dich",
+                    "He thong ghi nhan giao dich bat thuong. Vui long mo lien ket va nhap ma OTP hien tren thiet bi Preview (goc man hinh) vao trang xac minh.",
+                    "https://verify-bank-support.example/otp",
+                    "Mo trang xac minh",
+                    null,
+                    List.of("Domain nguoi gui dang ngo", "Yeu cau OTP tren trang ngoai ngan hang")
+            ));
+            emails.add(buildInboxEmail(
+                    step,
+                    2,
+                    "LEGIT",
+                    false,
+                    "it-notify@cybershield.internal",
+                    "IT Operations",
+                    "Nhac nho: khong nhap OTP vao lien ket la",
+                    "Chi nhap ma OTP tren trang chinh thuc sau khi kiem tra URL. Ma hien tren thiet bi Preview neu co bai tap MAIL_OTP.",
+                    "https://intranet.cybershield.internal/security",
+                    "Huong dan noi bo",
                     null,
                     List.of()
             ));

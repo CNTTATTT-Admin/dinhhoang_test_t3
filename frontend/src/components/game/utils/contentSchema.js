@@ -80,6 +80,7 @@ export function normalizeScenarioContent({ stepType, content, queue }) {
       displayUrl: raw?.traps?.browser?.addressBar?.displayUrl || raw?.landing?.fakeUrl || '',
       actualUrl: raw?.traps?.browser?.addressBar?.actualUrl || raw?.landing?.fakeUrl || '',
       formType: raw?.traps?.browser?.formType || (scenarioType === 'MAIL_OTP' ? 'OTP' : 'CREDENTIAL'),
+      webType: raw?.traps?.browser?.webType || raw?.webType || 'MICROSOFT',
     },
     zalo: {
       enabled: Boolean(raw?.traps?.zalo?.enabled ?? zaloEnabled),

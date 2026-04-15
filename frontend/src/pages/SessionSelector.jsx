@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, CheckCircle2, Lock, ShieldAlert, Sparkles } from 'lucide-react'
 import * as scenarioService from '../services/scenarioService.js'
 import * as sessionService from '../services/sessionService.js'
+import * as authService from '../services/authService.js'
 import PageShell from '../components/layout/PageShell.jsx'
+import { clearAuthStorage, resolveStoredToken } from '../utils/axiosClient.js'
 
 function isUuid(value) {
   return (
@@ -50,6 +52,18 @@ export default function SessionSelector() {
   const [error, setError] = useState('')
   const [scenario, setScenario] = useState(null)
   const [sessions, setSessions] = useState([])
+  const handleLogout = useCallback(async () => {
+    try {
+      if (resolveStoredToken()) {
+        await authService.logout()
+      }
+    } catch {
+      // Server logout can fail on expired token; still clear client auth state.
+    } finally {
+      clearAuthStorage()
+      navigate('/login', { replace: true })
+    }
+  }, [navigate])
 
   useEffect(() => {
     let alive = true
@@ -98,7 +112,7 @@ export default function SessionSelector() {
   }, [completedCount, sessions.length])
 
   return (
-    <PageShell headerVariant="user">
+    <PageShell headerVariant="user" onLogout={handleLogout}>
       <div className="flex-1 flex flex-col w-full bg-[#0B1120] text-white">
         <main className="mx-auto flex w-full max-w-6xl flex-grow flex-col bg-[#0B1120] px-6 py-8 md:px-10">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">

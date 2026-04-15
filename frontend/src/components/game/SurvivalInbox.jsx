@@ -17,7 +17,34 @@ import { AppWindow, DesktopEnvironment } from './windows/DesktopShell.jsx'
 import GmailWindow from './windows/GmailWindow.jsx'
 
 const SCORE_CORRECT = 120
-const SCORE_FALSE_REPORT = 60
+const SCORE_FALSE_REPORT = 120
+const WEB_CREDENTIALS = {
+  FACEBOOK: { user: 'admin_fanpage@cybershield.vn', pass: 'fb@admin2026' },
+  GOOGLE: { user: 'data_share@cybershield.vn', pass: 'drive_secure_99!' },
+  GITHUB: { user: 'dev_lead@cybershield.vn', pass: 'Git!P@ss2026' },
+  MICROSOFT: { user: 'nhanvien@cybershield.vn', pass: 'Ms365@Office!' },
+  FINANCE: { user: 'ketoan01', pass: 'K3t0an@2026' },
+}
+const WEB_LABELS = {
+  FACEBOOK: { name: 'Facebook Fanpage', url: 'facebook.com/cybershield' },
+  GOOGLE: { name: 'Google Drive (Dữ liệu chung)', url: 'drive.google.com' },
+  GITHUB: { name: 'GitHub (Mã nguồn)', url: 'github.com' },
+  MICROSOFT: { name: 'Microsoft 365 (Email/Teams)', url: 'login.microsoftonline.com' },
+  FINANCE: { name: 'Hệ thống Kế toán (Nội bộ)', url: 'finance.cybershield.internal' },
+}
+
+function resolveWebTypeFromEmail(email, fallbackType) {
+  const direct = String(email?.webType || '').toUpperCase().trim()
+  if (direct && WEB_CREDENTIALS[direct]) return direct
+  const token = `${email?.linkUrl || ''} ${email?.senderEmail || ''} ${email?.subject || ''}`.toLowerCase()
+  if (token.includes('facebook')) return 'FACEBOOK'
+  if (token.includes('google') || token.includes('drive')) return 'GOOGLE'
+  if (token.includes('github')) return 'GITHUB'
+  if (token.includes('finance') || token.includes('ketoan')) return 'FINANCE'
+  if (token.includes('microsoft') || token.includes('office') || token.includes('outlook')) return 'MICROSOFT'
+  const fallback = String(fallbackType || 'MICROSOFT').toUpperCase().trim()
+  return WEB_CREDENTIALS[fallback] ? fallback : 'MICROSOFT'
+}
 
 function playStampTone(isDanger) {
   try {
@@ -145,10 +172,17 @@ function SurvivalInboxScreen() {
   const hasSubmittedRef = useRef(false)
   const pendingTrapDecisionRef = useRef(null)
   const deferredDebriefRef = useRef(null)
+  /** MAIL_OTP: cặp OTP nhập / đúng tại thời điểm gửi trap (state cuối email có thể sai khi nộp bài). */
+  const mailOtpSnapshotRef = useRef(null)
+  const otpTrapBusyRef = useRef(false)
+  const [otpTrapBusy, setOtpTrapBusy] = useState(false)
+  const webTrapSubmittedEmailRef = useRef(null)
+  const [webTrapBusy, setWebTrapBusy] = useState(false)
   const [scenarioModel, setScenarioModel] = useState(null)
   const [browserUser, setBrowserUser] = useState('')
   const [browserPass, setBrowserPass] = useState('')
   const [browserOtp, setBrowserOtp] = useState('')
+  const [generatedOtp, setGeneratedOtp] = useState('')
   const [activeApp, setActiveApp] = useState('mail')
   const mailWindowNodeRef = useRef(null)
   const notepadWindowNodeRef = useRef(null)
@@ -166,32 +200,25 @@ function SurvivalInboxScreen() {
   }, [currentEmail?.attachmentJson])
   const scenarioType = scenarioModel?.scenarioType || 'MAIL_STANDARD'
   const isMailOtpScenario = scenarioType === 'MAIL_OTP'
+  const isCurrentEmailOtpScenario = useMemo(() => {
+    if (!isMailOtpScenario || !currentEmail) return false
+    const formFromModel = String(scenarioModel?.traps?.browser?.formType || '').toUpperCase()
+    const formFromTrap = String(gameState.trap.browserFormType || '').toUpperCase()
+    if (formFromModel === 'OTP' || formFromTrap === 'OTP') return true
+    const tag = String(currentEmail.slotTag || '').toUpperCase()
+    if (tag.includes('OTP')) return true
+    return isMailOtpScenario
+  }, [
+    currentEmail,
+    gameState.trap.browserFormType,
+    isMailOtpScenario,
+    scenarioModel?.traps?.browser?.formType,
+  ])
+  const showPhoneOtpPreview =
+    gameState.ui.isBrowserOpen &&
+    isCurrentEmailOtpScenario &&
+    gameState.ui.isPhoneWidgetVisible
   const appWindowTitle = 'Inbox - hr.department@company.com - Google Chrome'
-  const notepadContent = `// Thông tin đăng nhập nội bộ:
-1. Facebook Fanpage:
-URL: facebook.com/cybershield
-User: admin_fanpage@cybershield.vn
-Pass: fb@admin2026
-
-2. Google Drive (Dữ liệu chung):
-URL: drive.google.com
-User: data_share@cybershield.vn
-Pass: drive_secure_99!
-
-3. GitHub (Mã nguồn):
-URL: github.com
-User: dev_lead@cybershield.vn
-Pass: Git!P@ss2026
-
-4. Microsoft 365 (Email/Teams):
-URL: login.microsoftonline.com
-User: nhanvien@cybershield.vn
-Pass: Ms365@Office!
-
-5. Hệ thống Kế toán (Nội bộ):
-URL: finance.cybershield.internal
-User: ketoan01
-Pass: K3t0an@2026`
   const completedCount = Math.min(Math.max(index, decisionHistory.length), queue.length)
   const queueLen = queue.length
   const progressPct = queue.length ? Math.round((completedCount / queue.length) * 100) : 0
@@ -202,8 +229,33 @@ Pass: K3t0an@2026`
     (!attachmentSpec ||
       openedAttachmentIds.some((id) => String(id) === String(currentEmail?.id)))
   const canTrustBrowserTrap = isMailOtpScenario
-    ? browserOtp.trim().length >= MIN_OTP_LEN
-    : browserUser.trim().length > 0 && browserPass.trim().length > 0
+    ? browserOtp.trim().length >= MIN_OTP_LEN && !otpTrapBusy
+    : browserUser.trim().length > 0 && browserPass.trim().length > 0 && !webTrapBusy
+  const activeWebType = useMemo(
+    () => resolveWebTypeFromEmail(currentEmail, scenarioModel?.traps?.browser?.webType),
+    [currentEmail, scenarioModel?.traps?.browser?.webType],
+  )
+  const notepadContent = useMemo(() => {
+    const credential = WEB_CREDENTIALS[activeWebType] || WEB_CREDENTIALS.MICROSOFT
+    const label = WEB_LABELS[activeWebType] || WEB_LABELS.MICROSOFT
+    return `// Passwords.txt (Nội bộ)
+Mục tiêu hiện tại: ${label.name}
+URL: ${label.url}
+User: ${credential.user}
+Pass: ${credential.pass}
+
+---
+Các tài khoản khác:
+Facebook: admin_fanpage@cybershield.vn / fb@admin2026
+Google: data_share@cybershield.vn / drive_secure_99!
+GitHub: dev_lead@cybershield.vn / Git!P@ss2026
+Microsoft: nhanvien@cybershield.vn / Ms365@Office!
+Finance: ketoan01 / K3t0an@2026`
+  }, [activeWebType])
+  const notepadDefaultPosition = useMemo(() => {
+    if (typeof window === 'undefined') return { x: 860, y: 20 }
+    return { x: Math.max(0, window.innerWidth - 300), y: 20 }
+  }, [])
 
   const appendTrapVerifiedDecision = useCallback(() => {
     const rawId = currentEmail?.id
@@ -231,6 +283,10 @@ Pass: K3t0an@2026`
   const loadBySessionId = useCallback(async () => {
     hasSubmittedRef.current = false
     pendingTrapDecisionRef.current = null
+    otpTrapBusyRef.current = false
+    webTrapSubmittedEmailRef.current = null
+    setOtpTrapBusy(false)
+    setWebTrapBusy(false)
     if (!stepId) {
       setError('Thiếu stepId trên URL.')
       setIsLoading(false)
@@ -317,6 +373,7 @@ Pass: K3t0an@2026`
       setBrowserUser('')
       setBrowserPass('')
       setBrowserOtp('')
+      setGeneratedOtp('')
       setActiveApp('mail')
     } catch (err) {
       setError(err?.response?.data?.message || err?.message || 'Không thể nạp dữ liệu màn chơi.')
@@ -336,7 +393,19 @@ Pass: K3t0an@2026`
 
   useEffect(() => {
     setAttachmentModalOpen(false)
-  }, [index])
+    setBrowserUser('')
+    setBrowserPass('')
+    setBrowserOtp('')
+    gameActions.setPhoneWidgetVisible(false)
+    webTrapSubmittedEmailRef.current = null
+    setWebTrapBusy(false)
+    if (isMailOtpScenario && currentEmail) {
+      setGeneratedOtp(Math.floor(100000 + Math.random() * 900000).toString())
+      return
+    }
+    setGeneratedOtp('')
+    // Only reset on question boundary; omit gameActions from deps (link click changes its identity and would hide the widget).
+  }, [index, isMailOtpScenario, currentEmail?.id])
 
   const submitResult = useCallback(async (opts = {}) => {
     const deferDebrief = Boolean(opts?.deferDebrief)
@@ -370,26 +439,50 @@ Pass: K3t0an@2026`
         finalScore: scoreRef.current,
         timeTakenSeconds,
       }
+      const canMapToEmailDecisions = finalEmailDecisions.length > 0
       if (st === 'MAIL_OTP') {
-        payload.emailDecisions = finalEmailDecisions.map((decision) => ({
-          emailId: decision.emailId,
-          isPhishing: decision.isPhishing,
-          userAction: decision.userAction,
-        }))
+        const snap = mailOtpSnapshotRef.current
+        const otpEntered = snap?.entered != null ? snap.entered : browserOtp.trim()
+        const otpExpected = snap?.expected != null ? snap.expected : generatedOtp
+        payload.emailDecisions = finalEmailDecisions.map((decision) => {
+          const row = {
+            emailId: decision.emailId,
+            isPhishing: decision.isPhishing,
+            userAction: decision.userAction,
+          }
+          if (decision.payload != null || decision.expectedPayload != null) {
+            row.payload = decision.payload
+            row.expectedPayload = decision.expectedPayload
+          } else if (
+            snap &&
+            decision.userAction === 'VERIFIED' &&
+            String(decision.emailId) === String(snap.emailId)
+          ) {
+            row.payload = otpEntered
+            row.expectedPayload = otpExpected
+          }
+          return row
+        })
         payload.gameplayDecisions = [
           {
             decisionType: 'OTP_SUBMIT',
-            userAction: 'VERIFIED',
+            userAction: 'OTP_SUBMIT',
             isPhishing: false,
-            payload: browserOtp.trim() || scenarioModel?.traps?.otp?.code || '',
+            payload: otpEntered,
+            expectedPayload: otpExpected,
           },
         ]
-      } else if (st === 'MAIL') {
-        payload.emailDecisions = finalEmailDecisions.map((decision) => ({
-          emailId: decision.emailId,
-          isPhishing: decision.isPhishing,
-          userAction: decision.userAction,
-        }))
+      } else if (st === 'MAIL' || canMapToEmailDecisions) {
+        payload.emailDecisions = finalEmailDecisions.map((decision) => {
+          const row = {
+            emailId: decision.emailId,
+            isPhishing: decision.isPhishing,
+            userAction: decision.userAction,
+          }
+          if (decision.payload != null) row.payload = decision.payload
+          if (decision.expectedPayload != null) row.expectedPayload = decision.expectedPayload
+          return row
+        })
       } else {
         const normalizedType =
           st === 'WEB_PAGE' ? 'BROWSER_VERDICT' : st === 'OTP' ? 'OTP_SUBMIT' : 'ZALO_VERDICT'
@@ -399,7 +492,7 @@ Pass: K3t0an@2026`
           isPhishing: decision.isPhishing,
           payload:
             st === 'OTP'
-              ? browserOtp.trim() || scenarioModel?.traps?.otp?.code || undefined
+              ? browserOtp.trim() || generatedOtp || undefined
               : undefined,
         }))
       }
@@ -439,9 +532,9 @@ Pass: K3t0an@2026`
   }, [
     browserOtp,
     decisionHistory,
+    generatedOtp,
     isSubmittingResult,
     playContext?.stepType,
-    scenarioModel?.traps?.otp?.code,
     startedAtMs,
     stepId,
   ])
@@ -465,6 +558,12 @@ Pass: K3t0an@2026`
       setGameOverNonMail(true)
     }
   }, [currentEmail, gameOverEmail, gameOverNonMail, gameState.trap.isPhished, status])
+
+  const handleCloseBrowser = useCallback(() => {
+    gameActions.setPhoneWidgetVisible(false)
+    gameActions.closeBrowser()
+    setGeneratedOtp('')
+  }, [gameActions])
 
   const handleEmailDecision = useCallback(
     (action) => {
@@ -549,21 +648,28 @@ Pass: K3t0an@2026`
 
   const handleLinkClick = useCallback(
     (url) => {
+      if (!currentEmail) return
       const shouldOpenBrowserTrap =
         scenarioModel?.traps?.browser?.enabled ||
         scenarioType === 'MAIL_WEB' ||
+        isMailOtpScenario ||
         (Boolean(currentEmail?.isPhishing) && Boolean(url))
       if (!shouldOpenBrowserTrap) return
+      if (isMailOtpScenario) {
+        setGeneratedOtp(Math.floor(100000 + Math.random() * 900000).toString())
+        gameActions.setPhoneWidgetVisible(true)
+      }
+
       const trapId = `email-link-${currentEmail?.id ?? 'unknown'}`
       gameActions.markInspectedLink(trapId)
       gameActions.openBrowser({
         url: url || scenarioModel?.traps?.browser?.actualUrl || scenarioModel?.traps?.browser?.displayUrl,
         trapId,
-        formType: scenarioModel?.traps?.browser?.formType || 'CREDENTIAL',
+        formType: isMailOtpScenario ? 'OTP' : scenarioModel?.traps?.browser?.formType || 'CREDENTIAL',
       })
       setActiveApp('browser')
     },
-    [currentEmail?.id, currentEmail?.isPhishing, gameActions, scenarioModel, scenarioType],
+    [currentEmail, gameActions, isMailOtpScenario, scenarioModel, scenarioType],
   )
 
   const handleFileDownload = useCallback(
@@ -606,31 +712,207 @@ Pass: K3t0an@2026`
     handleEmailDecision('VERIFIED')
   }, [handleEmailDecision])
 
-  const handleSubmitBrowserTrap = useCallback(() => {
-    const phishedDecision = (() => {
-      const rawId = currentEmail?.id
-      const emailId =
-        typeof rawId === 'number' ? rawId : Number.parseInt(String(rawId), 10) || index + 1
-      return {
+  const handleSubmitBrowserTrap = useCallback(async () => {
+    if (!currentEmail) return
+    const isMailWebScenario = scenarioType === 'MAIL_WEB'
+    const rawId = currentEmail?.id
+    const emailId =
+      typeof rawId === 'number' ? rawId : Number.parseInt(String(rawId), 10) || index + 1
+    if (isMailWebScenario) {
+      if (webTrapSubmittedEmailRef.current === emailId) return
+      webTrapSubmittedEmailRef.current = emailId
+      setWebTrapBusy(true)
+    }
+    if (isMailOtpScenario) {
+      if (otpTrapBusyRef.current) return
+      otpTrapBusyRef.current = true
+      setOtpTrapBusy(true)
+    }
+
+    const endMailOtpTrap = () => {
+      if (isMailOtpScenario) {
+        otpTrapBusyRef.current = false
+        setOtpTrapBusy(false)
+      }
+    }
+
+    try {
+      if (isMailWebScenario) {
+        const expected = WEB_CREDENTIALS[activeWebType] || WEB_CREDENTIALS.MICROSOFT
+        const enteredPayload = `${browserUser.trim()}::${browserPass}`
+        const expectedPayload = `${expected.user}::${expected.pass}`
+        const credentialsMatch =
+          browserUser.trim() === expected.user && browserPass === expected.pass
+        const trustedDecision = {
+          emailId,
+          isPhishing: Boolean(currentEmail?.isPhishing),
+          userAction: 'VERIFIED',
+          payload: enteredPayload,
+          expectedPayload,
+        }
+        setDecisionHistory((prev) => [...prev, trustedDecision])
+        gameActions.commitDecision('VERIFIED')
+        const delta = currentEmail?.isPhishing
+          ? -SCORE_FALSE_REPORT
+          : credentialsMatch
+            ? SCORE_CORRECT
+            : -SCORE_FALSE_REPORT
+        const nextScore = scoreRef.current + delta
+        scoreRef.current = nextScore
+        setScore(nextScore)
+        gameActions.closeBrowser()
+        gameActions.setPhoneWidgetVisible(false)
+        setBrowserUser('')
+        setBrowserPass('')
+        const nextIndex = index + 1
+        if (nextIndex >= queue.length) {
+          const failedByCredentials = !currentEmail?.isPhishing && !credentialsMatch
+          setStatus(nextScore < 0 || failedByCredentials ? 'GAME_OVER' : 'VICTORY')
+          setIsFinished(true)
+        } else {
+          setIndex(nextIndex)
+        }
+        return
+      }
+
+      if (isMailOtpScenario) {
+        mailOtpSnapshotRef.current = {
+          entered: browserOtp.trim(),
+          expected: generatedOtp,
+          emailId,
+        }
+      } else {
+        mailOtpSnapshotRef.current = null
+      }
+
+      if (!currentEmail.isPhishing) {
+        if (!isMailOtpScenario) {
+          const expected = WEB_CREDENTIALS[activeWebType]
+          const credentialMatch =
+            !!expected &&
+            browserUser.trim() === expected.user &&
+            browserPass === expected.pass
+          if (!credentialMatch) {
+            const nextScore = scoreRef.current - SCORE_FALSE_REPORT
+            scoreRef.current = nextScore
+            setScore(nextScore)
+            setIsShaking(true)
+            window.setTimeout(() => setIsShaking(false), 220)
+            return
+          }
+        }
+        const otpMatched = browserOtp.trim() === generatedOtp
+        if (!otpMatched) {
+          if (isMailOtpScenario) {
+            const wrongDecision = {
+              emailId,
+              isPhishing: false,
+              userAction: 'VERIFIED',
+              payload: mailOtpSnapshotRef.current?.entered,
+              expectedPayload: mailOtpSnapshotRef.current?.expected,
+            }
+            setDecisionHistory((prev) => [...prev, wrongDecision])
+            gameActions.commitDecision('VERIFIED')
+            const nextScore = scoreRef.current - SCORE_FALSE_REPORT
+            scoreRef.current = nextScore
+            setScore(nextScore)
+            setIsShaking(true)
+            window.setTimeout(() => setIsShaking(false), 220)
+            handleCloseBrowser()
+            setBrowserOtp('')
+            const nextIndex = index + 1
+            if (nextIndex >= queue.length) {
+              setStatus(nextScore < 0 ? 'GAME_OVER' : 'VICTORY')
+              setIsFinished(true)
+            } else {
+              setIndex(nextIndex)
+            }
+            return
+          }
+          const nextScore = scoreRef.current - SCORE_FALSE_REPORT
+          scoreRef.current = nextScore
+          setScore(nextScore)
+          setIsShaking(true)
+          window.setTimeout(() => setIsShaking(false), 220)
+          return
+        }
+        const trustedDecision = {
+          emailId,
+          isPhishing: false,
+          userAction: 'VERIFIED',
+          ...(isMailOtpScenario && mailOtpSnapshotRef.current
+            ? {
+                payload: mailOtpSnapshotRef.current.entered,
+                expectedPayload: mailOtpSnapshotRef.current.expected,
+              }
+            : {}),
+        }
+        setDecisionHistory((prev) => [...prev, trustedDecision])
+        gameActions.commitDecision('VERIFIED')
+        handleCloseBrowser()
+        setBrowserOtp('')
+        const nextScore = scoreRef.current + SCORE_CORRECT
+        scoreRef.current = nextScore
+        setScore(nextScore)
+        const nextIndex = index + 1
+        if (nextIndex >= queue.length) {
+          setStatus(nextScore < 0 ? 'GAME_OVER' : 'VICTORY')
+          setIsFinished(true)
+        } else {
+          setIndex(nextIndex)
+        }
+        return
+      }
+
+      const phishedDecision = {
         emailId,
         isPhishing: true,
         userAction: 'VERIFIED',
+        ...(isMailOtpScenario && mailOtpSnapshotRef.current
+          ? {
+              payload: mailOtpSnapshotRef.current.entered,
+              expectedPayload: mailOtpSnapshotRef.current.expected,
+            }
+          : {}),
       }
-    })()
-    pendingTrapDecisionRef.current = phishedDecision
-    setDecisionHistory((prev) => [...prev, phishedDecision])
-    gameActions.commitDecision('VERIFIED')
-    gameActions.closeBrowser()
-    gameActions.triggerPhished(
-      isMailOtpScenario ? 'OTP_SUBMIT_ON_PHISHING_PAGE' : 'CREDENTIAL_SUBMIT_ON_PHISHING_PAGE',
-    )
-    setStatus('GAME_OVER')
-    setGameOverEmail(currentEmail || null)
-    setGameOverNonMail(true)
-    setIsFinished(false)
-    hasSubmittedRef.current = false
-    submitResult({ deferDebrief: true, immediateDecisions: [phishedDecision] })
-  }, [currentEmail, currentEmail?.id, gameActions, index, isMailOtpScenario, submitResult])
+      pendingTrapDecisionRef.current = phishedDecision
+      setDecisionHistory((prev) => [...prev, phishedDecision])
+      gameActions.commitDecision('VERIFIED')
+      if (!isMailOtpScenario) {
+        handleCloseBrowser()
+      }
+      gameActions.triggerPhished(
+        isMailOtpScenario ? 'OTP_SUBMIT_ON_PHISHING_PAGE' : 'CREDENTIAL_SUBMIT_ON_PHISHING_PAGE',
+      )
+      setStatus('GAME_OVER')
+      setGameOverEmail(currentEmail || null)
+      setGameOverNonMail(true)
+      setIsFinished(false)
+      hasSubmittedRef.current = false
+      await submitResult({ deferDebrief: true, immediateDecisions: [phishedDecision] })
+      if (isMailOtpScenario) {
+        handleCloseBrowser()
+        setBrowserOtp('')
+        setIndex((prev) => prev + 1)
+      }
+    } finally {
+      endMailOtpTrap()
+    }
+  }, [
+    browserOtp,
+    currentEmail,
+    gameActions,
+    generatedOtp,
+    handleCloseBrowser,
+    index,
+    isMailOtpScenario,
+    scenarioType,
+    activeWebType,
+    browserUser,
+    browserPass,
+    queue.length,
+    submitResult,
+  ])
 
   const statusCls = useMemo(() => {
     if (status === 'GAME_OVER') return 'text-red-300'
@@ -759,18 +1041,18 @@ Pass: K3t0an@2026`
         {scenarioType === 'MAIL_WEB' ? (
           <div
             className="pointer-events-none absolute inset-0"
-            style={{ zIndex: activeApp === 'notepad' ? 100 : 50 }}
+            style={{ zIndex: activeApp === 'notepad' ? 95 : 60 }}
           >
             <Draggable
               nodeRef={notepadWindowNodeRef}
               handle=".window-header"
-              defaultPosition={{ x: 980, y: 130 }}
+              defaultPosition={notepadDefaultPosition}
               onStart={() => setActiveApp('notepad')}
             >
               <div ref={notepadWindowNodeRef} className="pointer-events-auto">
                 <AppWindow
                   title="Passwords.txt - Notepad"
-                  className="h-[400px] w-[300px]"
+                  className="h-[360px] w-[290px]"
                   onMouseDown={() => setActiveApp('notepad')}
                 >
                   <div className="h-full bg-[#f4f4f4] p-2">
@@ -831,16 +1113,22 @@ Pass: K3t0an@2026`
                   <FakeBrowserWindow
                     title={scenarioModel?.traps?.browser?.title}
                     displayUrl={scenarioModel?.traps?.browser?.displayUrl || gameState.trap.openedUrl}
-                    formType={scenarioModel?.traps?.browser?.formType}
+                    webType={activeWebType}
+                    formType={isMailOtpScenario ? 'OTP' : scenarioModel?.traps?.browser?.formType}
                     loginUser={browserUser}
                     loginPass={browserPass}
                     otpInput={browserOtp}
                     onLoginUserChange={setBrowserUser}
                     onLoginPassChange={setBrowserPass}
                     onOtpChange={setBrowserOtp}
-                    onClose={gameActions.closeBrowser}
+                    onClose={() => {
+                      if (isMailOtpScenario && otpTrapBusyRef.current) return
+                      if (scenarioType === 'MAIL_WEB' && webTrapBusy) return
+                      handleCloseBrowser()
+                    }}
                     onSubmitTrap={handleSubmitBrowserTrap}
                     canSubmitTrap={canTrustBrowserTrap}
+                    closeDisabled={isMailOtpScenario && otpTrapBusy}
                   />
                 </div>
               </div>
@@ -863,7 +1151,7 @@ Pass: K3t0an@2026`
             }}
           />
         ) : null}
-        <PhoneOtpWidget visible={isMailOtpScenario && gameState.ui.isPhoneWidgetVisible} code={scenarioModel?.traps?.otp?.code} />
+        <PhoneOtpWidget visible={showPhoneOtpPreview} code={generatedOtp} />
       </DesktopEnvironment>
 
       {status === 'GAME_OVER' ? (
