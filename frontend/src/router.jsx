@@ -40,6 +40,10 @@ export const router = createBrowserRouter([
     element: <SurvivalInbox />,
   },
   {
+    path: '/debrief/:sessionId',
+    element: <Navigate to="/campaigns" replace />,
+  },
+  {
     path: '*',
     element: <Navigate to="/" replace />,
   },

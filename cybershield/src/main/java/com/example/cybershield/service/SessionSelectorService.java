@@ -80,6 +80,7 @@ public class SessionSelectorService {
     ) {
         int threatLevel = switch (step.getStepType() == null ? "" : step.getStepType().toUpperCase()) {
             case "MAIL" -> 1;
+            case "MAIL_OTP" -> 3;
             case "WEB_PAGE" -> 2;
             case "OTP" -> 3;
             case "ZALO" -> 2;
@@ -95,6 +96,7 @@ public class SessionSelectorService {
                 step.getId(),
                 scenarioId,
                 step.getStepOrder(),
+                step.getStepType() == null ? "MAIL" : step.getStepType(),
                 lessonTitle,
                 Math.min(5, Math.max(1, threatLevel)),
                 objective,
@@ -107,6 +109,7 @@ public class SessionSelectorService {
         String type = step.getStepType() == null ? "" : step.getStepType().toUpperCase();
         return switch (type) {
             case "MAIL" -> "Nhận diện Email giả mạo đại trà";
+            case "MAIL_OTP" -> "Email + OTP: đọc mã trong thư rồi xác nhận";
             case "WEB_PAGE" -> "Kiểm tra Landing Page đáng ngờ";
             case "OTP" -> "Phòng thủ yêu cầu OTP bất thường";
             case "ZALO" -> "Xác minh tin nhắn mạo danh";

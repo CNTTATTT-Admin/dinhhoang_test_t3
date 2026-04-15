@@ -10,4 +10,5 @@ import java.util.UUID;
 public interface TrainingSessionRepository extends JpaRepository<TrainingSession, UUID> {
     long countByUserIdAndScenarioIdAndStatus(UUID userId, UUID scenarioId, String status);
     long countByUserId(UUID userId);
+    long countByUserIdAndTutorialModeFalse(UUID userId);
 }

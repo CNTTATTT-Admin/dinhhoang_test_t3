@@ -20,6 +20,23 @@ function getSessionState(item) {
   return 'ready'
 }
 
+function stepTypeMeta(stepType) {
+  const u = (stepType || 'MAIL').toString().toUpperCase()
+  if (u === 'WEB_PAGE') {
+    return { label: 'Web', className: 'bg-blue-500/15 text-blue-200 ring-blue-400/25' }
+  }
+  if (u === 'OTP') {
+    return { label: 'OTP', className: 'bg-amber-500/15 text-amber-200 ring-amber-400/25' }
+  }
+  if (u === 'ZALO') {
+    return { label: 'Zalo', className: 'bg-sky-500/15 text-sky-200 ring-sky-400/25' }
+  }
+  if (u === 'MAIL_OTP') {
+    return { label: 'Mail + OTP', className: 'bg-violet-500/15 text-violet-200 ring-violet-400/25' }
+  }
+  return { label: 'Mail', className: 'bg-slate-500/15 text-slate-200 ring-slate-400/25' }
+}
+
 function threatDots(level) {
   const value = Math.max(1, Math.min(5, Number(level) || 1))
   return Array.from({ length: 5 }, (_, i) => i < value)
@@ -157,6 +174,7 @@ export default function SessionSelector() {
                   const isLocked = state === 'locked'
                   const isReady = state === 'ready'
                   const isLast = idx === sessions.length - 1
+                  const typeBadge = stepTypeMeta(item.stepType)
                   return (
                     <div key={item.sessionId} className="relative pl-10">
                       {!isLast ? (
@@ -203,9 +221,19 @@ export default function SessionSelector() {
                             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                               Level {item.stepOrder ?? item.orderNumber ?? '-'}
                             </p>
-                            <h3 className="mt-1 break-words text-base font-bold text-white">
-                              {item.lessonTitle}
-                            </h3>
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              <h3 className="min-w-0 break-words text-base font-bold text-white">
+                                {item.lessonTitle}
+                              </h3>
+                              <span
+                                className={[
+                                  'inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ring-1',
+                                  typeBadge.className,
+                                ].join(' ')}
+                              >
+                                {typeBadge.label}
+                              </span>
+                            </div>
 
                             <div className="mt-2 flex items-center gap-1.5">
                               {threatDots(item.threatLevel).map((on, idx) => (
