@@ -1,0 +1,59 @@
+services:
+  # 1. Database PostgreSQL
+  db:
+    image: postgres:15
+    container_name: cybershield-db
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: cybershield
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "admin", "-d", "cybershield", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cybershield-net
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  # 2. pgAdmin (Công cụ quản lý PostgreSQL qua Web)
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: cybershield-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@cybershield.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80" # Truy cập pgAdmin tại http://localhost:5050
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - cybershield-net
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+  # 3. Redis (Lưu Token/Session)
+  redis:
+    image: redis:7-alpine
+    container_name: cybershield-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - cybershield-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+networks:
+  cybershield-net:
+    driver: bridge
+
+volumes:
+  db_data:
+  pgadmin_data:
