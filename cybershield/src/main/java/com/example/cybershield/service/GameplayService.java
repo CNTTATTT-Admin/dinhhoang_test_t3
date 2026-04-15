@@ -63,7 +63,7 @@ public class GameplayService {
         String stepType = step.getStepType() == null ? "MAIL" : step.getStepType().toUpperCase(Locale.ROOT);
         boolean phishingScenario = resolvePhishingScenario(step);
         PlayContextResponse.LandingInfo landing = null;
-        if ("WEB_PAGE".equals(stepType)) {
+        if ("WEB_PAGE".equals(stepType) || "MAIL_WEB".equals(stepType)) {
             landing = landingPageRepository.findByStep_Id(stepId)
                     .map(this::toLandingInfo)
                     .orElse(null);
@@ -107,7 +107,7 @@ public class GameplayService {
      */
     private boolean resolvePhishingScenario(ScenarioStep step) {
         String type = step.getStepType() == null ? "" : step.getStepType().toUpperCase(Locale.ROOT);
-        if ("WEB_PAGE".equals(type) || "OTP".equals(type) || "ZALO".equals(type)) {
+        if ("WEB_PAGE".equals(type) || "MAIL_WEB".equals(type) || "OTP".equals(type) || "ZALO".equals(type)) {
             String content = step.getContent();
             if (content != null && content.contains("\"legit\":true")) {
                 return false;
@@ -168,8 +168,8 @@ public class GameplayService {
                 .findByScenarioIdOrderByStepOrderAsc(scenario.getId());
         String stepType = currentStep.getStepType() == null ? "MAIL" : currentStep.getStepType().toUpperCase(Locale.ROOT);
         boolean isMailOtp = "MAIL_OTP".equals(stepType);
-        boolean isMailOnly = "MAIL".equals(stepType);
-        boolean isMailWeb = "WEB_PAGE".equals(stepType);
+        boolean isMailOnly = "MAIL".equals(stepType) || "MAIL_STANDARD".equals(stepType) || "MAIL_FILE".equals(stepType);
+        boolean isMailWeb = "WEB_PAGE".equals(stepType) || "MAIL_WEB".equals(stepType);
         boolean mailLike = isMailOnly || isMailOtp;
         boolean useEmailDecisions = !emailDecisions.isEmpty();
 

@@ -306,7 +306,15 @@ export default function SessionSelector() {
                             <button
                               type="button"
                               disabled={isLocked}
-                              onClick={() => navigate(`/play/${item.sessionId}`)}
+                              onClick={() =>
+                                navigate(`/play/${item.sessionId}`, {
+                                  state: {
+                                    scenarioId: scenario?.id || scenarioId,
+                                    campaignTitle: scenario?.title || 'Chiến dịch huấn luyện',
+                                    lesson: item,
+                                  },
+                                })
+                              }
                               className={[
                                 'rounded-xl px-4 py-2 text-xs font-bold uppercase tracking-wide transition',
                                 isLocked

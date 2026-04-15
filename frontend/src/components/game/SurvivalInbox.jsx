@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import Draggable from 'react-draggable'
 import { ArrowLeft, Network, ShieldAlert } from 'lucide-react'
 import * as scenarioService from '../../services/scenarioService.js'
 import * as sessionService from '../../services/sessionService.js'
 import FakeBrowserWindow from './playModes/FakeBrowserWindow.jsx'
 import FakeZaloPanel from './playModes/FakeZaloPanel.jsx'
+import CompanyPolicy from './playModes/CompanyPolicy.jsx'
 import OtpChallengePanel, { MIN_OTP_LEN } from './playModes/OtpChallengePanel.jsx'
 import MailAttachmentSimulator from './MailAttachmentSimulator.jsx'
 import PhoneOtpWidget from './playModes/PhoneOtpWidget.jsx'
@@ -25,14 +26,6 @@ const WEB_CREDENTIALS = {
   MICROSOFT: { user: 'nhanvien@cybershield.vn', pass: 'Ms365@Office!' },
   FINANCE: { user: 'ketoan01', pass: 'K3t0an@2026' },
 }
-const WEB_LABELS = {
-  FACEBOOK: { name: 'Facebook Fanpage', url: 'facebook.com/cybershield' },
-  GOOGLE: { name: 'Google Drive (Dữ liệu chung)', url: 'drive.google.com' },
-  GITHUB: { name: 'GitHub (Mã nguồn)', url: 'github.com' },
-  MICROSOFT: { name: 'Microsoft 365 (Email/Teams)', url: 'login.microsoftonline.com' },
-  FINANCE: { name: 'Hệ thống Kế toán (Nội bộ)', url: 'finance.cybershield.internal' },
-}
-
 function resolveWebTypeFromEmail(email, fallbackType) {
   const direct = String(email?.webType || '').toUpperCase().trim()
   if (direct && WEB_CREDENTIALS[direct]) return direct
@@ -143,6 +136,7 @@ function mapApiInboxToQueue(rows) {
 
 function SurvivalInboxScreen() {
   const { sessionId: stepId } = useParams()
+  const location = useLocation()
   const navigate = useNavigate()
   const { state: gameState, actions: gameActions } = useGameState()
   const [isLoading, setIsLoading] = useState(true)
@@ -160,7 +154,6 @@ function SurvivalInboxScreen() {
   const [gameOverEmail, setGameOverEmail] = useState(null)
   const [gameOverNonMail, setGameOverNonMail] = useState(false)
   const [playContext, setPlayContext] = useState(null)
-  const [zaloReply, setZaloReply] = useState('')
   const [openedAttachmentIds, setOpenedAttachmentIds] = useState([])
   const [attachmentModalOpen, setAttachmentModalOpen] = useState(false)
   const [isShaking, setIsShaking] = useState(false)
@@ -174,6 +167,7 @@ function SurvivalInboxScreen() {
   const deferredDebriefRef = useRef(null)
   /** MAIL_OTP: cặp OTP nhập / đúng tại thời điểm gửi trap (state cuối email có thể sai khi nộp bài). */
   const mailOtpSnapshotRef = useRef(null)
+  const otpByEmailRef = useRef({})
   const otpTrapBusyRef = useRef(false)
   const [otpTrapBusy, setOtpTrapBusy] = useState(false)
   const webTrapSubmittedEmailRef = useRef(null)
@@ -184,12 +178,54 @@ function SurvivalInboxScreen() {
   const [browserOtp, setBrowserOtp] = useState('')
   const [generatedOtp, setGeneratedOtp] = useState('')
   const [activeApp, setActiveApp] = useState('mail')
+  const [windowZ, setWindowZ] = useState({
+    mail: 120,
+    notepad: 90,
+    policy: 88,
+    chat: 86,
+    browser: 130,
+  })
   const mailWindowNodeRef = useRef(null)
   const notepadWindowNodeRef = useRef(null)
   const chatWindowNodeRef = useRef(null)
+  const policyWindowNodeRef = useRef(null)
   const browserWindowNodeRef = useRef(null)
+  const zaloSubmittedEmailRef = useRef(null)
+  const zCounterRef = useRef(140)
+  const loadRequestSeqRef = useRef(0)
+
+  const routeScenarioIdHint = useMemo(() => {
+    const raw = location?.state?.scenarioId
+    if (!raw) return ''
+    return String(raw)
+  }, [location?.state?.scenarioId])
+
+  const routeCampaignTitleHint = useMemo(() => {
+    const raw = location?.state?.campaignTitle
+    if (!raw) return ''
+    return String(raw)
+  }, [location?.state?.campaignTitle])
+
+  const routeLessonHint = useMemo(() => {
+    const raw = location?.state?.lesson
+    if (!raw || typeof raw !== 'object') return null
+    if (String(raw?.sessionId ?? '') !== String(stepId ?? '')) return null
+    return raw
+  }, [location?.state?.lesson, stepId])
+
+  const bringToFront = useCallback((key) => {
+    if (!key) return
+    zCounterRef.current += 1
+    const next = zCounterRef.current
+    setWindowZ((prev) => ({ ...prev, [key]: next }))
+    setActiveApp(key)
+  }, [])
 
   const currentEmail = queue[index] ?? null
+  const currentEmailNumericId = useMemo(() => {
+    const rawId = currentEmail?.id
+    return typeof rawId === 'number' ? rawId : Number.parseInt(String(rawId), 10) || null
+  }, [currentEmail?.id])
   const attachmentSpec = useMemo(() => {
     if (!currentEmail?.attachmentJson) return null
     try {
@@ -200,6 +236,17 @@ function SurvivalInboxScreen() {
   }, [currentEmail?.attachmentJson])
   const scenarioType = scenarioModel?.scenarioType || 'MAIL_STANDARD'
   const isMailOtpScenario = scenarioType === 'MAIL_OTP'
+  const policyRules = useMemo(() => {
+    if (Array.isArray(scenarioModel?.policyRules) && scenarioModel.policyRules.length > 0) {
+      return scenarioModel.policyRules
+    }
+    try {
+      const parsed = JSON.parse(playContext?.content || '{}')
+      return Array.isArray(parsed?.policyRules) ? parsed.policyRules : []
+    } catch {
+      return []
+    }
+  }, [playContext?.content, scenarioModel?.policyRules])
   const isCurrentEmailOtpScenario = useMemo(() => {
     if (!isMailOtpScenario || !currentEmail) return false
     const formFromModel = String(scenarioModel?.traps?.browser?.formType || '').toUpperCase()
@@ -231,30 +278,147 @@ function SurvivalInboxScreen() {
   const canTrustBrowserTrap = isMailOtpScenario
     ? browserOtp.trim().length >= MIN_OTP_LEN && !otpTrapBusy
     : browserUser.trim().length > 0 && browserPass.trim().length > 0 && !webTrapBusy
+  const activeBrowserTrap = useMemo(() => {
+    const traps = scenarioModel?.traps?.browser?.emailTraps
+    if (!Array.isArray(traps) || !currentEmail) return null
+    const order = Number(currentEmail?.sortOrder)
+    if (!Number.isFinite(order)) return null
+    const matched = traps.find((trap) => Number(trap?.sortOrder) === order)
+    return matched || null
+  }, [currentEmail, scenarioModel?.traps?.browser?.emailTraps])
   const activeWebType = useMemo(
-    () => resolveWebTypeFromEmail(currentEmail, scenarioModel?.traps?.browser?.webType),
-    [currentEmail, scenarioModel?.traps?.browser?.webType],
+    () =>
+      resolveWebTypeFromEmail(
+        currentEmail,
+        activeBrowserTrap?.webType || scenarioModel?.traps?.browser?.webType,
+      ),
+    [activeBrowserTrap?.webType, currentEmail, scenarioModel?.traps?.browser?.webType],
   )
+  const ensureOtpForEmail = useCallback((emailId) => {
+    if (emailId == null) return ''
+    const key = String(emailId)
+    const existing = otpByEmailRef.current[key]
+    if (existing) return existing
+    const otp = Math.floor(100000 + Math.random() * 900000).toString()
+    otpByEmailRef.current[key] = otp
+    return otp
+  }, [])
+  const policySections = useMemo(() => {
+    if (Array.isArray(scenarioModel?.policySections) && scenarioModel.policySections.length > 0) {
+      return scenarioModel.policySections
+    }
+    try {
+      const parsed = JSON.parse(playContext?.content || '{}')
+      return Array.isArray(parsed?.policySections) ? parsed.policySections : []
+    } catch {
+      return []
+    }
+  }, [playContext?.content, scenarioModel?.policySections])
+  const zaloVerifyConfig = useMemo(() => {
+    if (scenarioType !== 'MAIL_ZALO') {
+      return {
+        required: true,
+        autoReply: 'Dạ em đã xác nhận theo quy trình nội bộ.',
+        sender: 'Liên hệ',
+        messages: [],
+      }
+    }
+    try {
+      const parsed = JSON.parse(playContext?.content || '{}')
+      const caseMap = Array.isArray(parsed?.caseMap) ? parsed.caseMap : []
+      const order = Number(currentEmail?.sortOrder)
+      const activeCase = Number.isFinite(order)
+        ? caseMap.find((item) => Number(item?.sortOrder) === order) || null
+        : null
+      const required =
+        typeof activeCase?.zaloVerifyRequired === 'boolean'
+          ? activeCase.zaloVerifyRequired
+          : typeof parsed?.zaloVerifyRequired === 'boolean'
+            ? parsed.zaloVerifyRequired
+            : !Boolean(currentEmail?.isPhishing)
+      const autoReply =
+        String(activeCase?.zaloAutoReply || parsed?.zaloAutoReply || 'Dạ em đã xác nhận theo quy trình nội bộ.')
+          .trim() || 'Dạ em đã xác nhận theo quy trình nội bộ.'
+      const messages = Array.isArray(activeCase?.messages)
+        ? activeCase.messages
+        : Array.isArray(parsed?.messages)
+          ? parsed.messages
+          : []
+      const sender = activeCase?.sender || parsed?.sender || 'Liên hệ'
+      return { required, autoReply, sender, messages }
+    } catch {
+      return {
+        required: !Boolean(currentEmail?.isPhishing),
+        autoReply: 'Dạ em đã xác nhận theo quy trình nội bộ.',
+        sender: 'Liên hệ',
+        messages: [],
+      }
+    }
+  }, [currentEmail?.isPhishing, currentEmail?.sortOrder, playContext?.content, scenarioType])
+  const activeZaloContent = useMemo(() => {
+    if (scenarioType !== 'MAIL_ZALO') return playContext?.content
+    try {
+      const parsed = JSON.parse(playContext?.content || '{}')
+      const merged = {
+        ...parsed,
+        sender: zaloVerifyConfig.sender,
+        messages: zaloVerifyConfig.messages,
+      }
+      return JSON.stringify(merged)
+    } catch {
+      return playContext?.content
+    }
+  }, [playContext?.content, scenarioType, zaloVerifyConfig.messages, zaloVerifyConfig.sender])
   const notepadContent = useMemo(() => {
-    const credential = WEB_CREDENTIALS[activeWebType] || WEB_CREDENTIALS.MICROSOFT
-    const label = WEB_LABELS[activeWebType] || WEB_LABELS.MICROSOFT
-    return `// Passwords.txt (Nội bộ)
-Mục tiêu hiện tại: ${label.name}
-URL: ${label.url}
-User: ${credential.user}
-Pass: ${credential.pass}
-
----
-Các tài khoản khác:
-Facebook: admin_fanpage@cybershield.vn / fb@admin2026
-Google: data_share@cybershield.vn / drive_secure_99!
-GitHub: dev_lead@cybershield.vn / Git!P@ss2026
-Microsoft: nhanvien@cybershield.vn / Ms365@Office!
-Finance: ketoan01 / K3t0an@2026`
-  }, [activeWebType])
+    const rows = [
+      ['Facebook Fanpage', 'facebook.com/cybershield', WEB_CREDENTIALS.FACEBOOK],
+      ['Google Drive', 'drive.google.com', WEB_CREDENTIALS.GOOGLE],
+      ['GitHub', 'github.com', WEB_CREDENTIALS.GITHUB],
+      ['Microsoft 365', 'login.microsoftonline.com', WEB_CREDENTIALS.MICROSOFT],
+      ['Finance', 'finance.cybershield.internal', WEB_CREDENTIALS.FINANCE],
+    ]
+    return rows
+      .map(
+        (row, idx) => `${idx + 1}. ${row[0]}
+URL: ${row[1]}
+User: ${row[2].user}
+Pass: ${row[2].pass}`,
+      )
+      .join('\n\n')
+  }, [])
   const notepadDefaultPosition = useMemo(() => {
-    if (typeof window === 'undefined') return { x: 860, y: 20 }
-    return { x: Math.max(0, window.innerWidth - 300), y: 20 }
+    if (typeof window === 'undefined') return { x: 20, y: 390 }
+    return { x: 20, y: 390 }
+  }, [])
+  const flow5Layout = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return {
+        gmail: { x: 400, y: 50 },
+        policy: { x: 20, y: 20 },
+        notepad: { x: 20, y: 400 },
+        chat: { x: 1000, y: 50 },
+      }
+    }
+    const width = window.innerWidth
+    const height = window.innerHeight
+    const gmailWidth = 920
+    const gmailHeight = 640
+    const chatWidth = 350
+    const policyHeight = 360
+    const notepadHeight = 360
+    const leftX = 20
+    const topY = 20
+    const gmailX = Math.max(220, Math.min(400, width - gmailWidth - 20))
+    const gmailY = Math.max(20, Math.min(50, height - gmailHeight - 70))
+    const chatX = Math.max(380, Math.min(width - chatWidth - 20, 1000))
+    const chatY = Math.max(20, Math.min(50, height - 550 - 70))
+    const notepadY = Math.max(topY + policyHeight + 20, Math.min(400, height - notepadHeight - 70))
+    return {
+      gmail: { x: gmailX, y: gmailY },
+      policy: { x: leftX, y: topY },
+      notepad: { x: leftX, y: notepadY },
+      chat: { x: chatX, y: chatY },
+    }
   }, [])
 
   const appendTrapVerifiedDecision = useCallback(() => {
@@ -280,7 +444,9 @@ Finance: ketoan01 / K3t0an@2026`
     gameActions.commitDecision('VERIFIED')
   }, [currentEmail?.id, gameActions, index])
 
-  const loadBySessionId = useCallback(async () => {
+  const loadBySessionId = useCallback(async (opts = {}) => {
+    const forceRefresh = Boolean(opts?.forceRefresh)
+    const requestSeq = ++loadRequestSeqRef.current
     hasSubmittedRef.current = false
     pendingTrapDecisionRef.current = null
     otpTrapBusyRef.current = false
@@ -297,24 +463,40 @@ Finance: ketoan01 / K3t0an@2026`
       setError('')
       setSenderTooltipOpen(false)
       setHoveredUrl('')
-      const { data: scenarios } = await scenarioService.getScenarios()
       let foundScenario = null
-      let foundLesson = null
+      let foundLesson = routeLessonHint
 
-      for (const scenario of Array.isArray(scenarios) ? scenarios : []) {
-        const { data: lessons } = await sessionService.fetchSessionsByScenario(scenario.id)
-        const matched = Array.isArray(lessons)
-          ? lessons.find((x) => String(x.sessionId) === String(stepId))
-          : null
-        if (matched) {
-          foundScenario = scenario
-          foundLesson = matched
-          break
+      if (routeScenarioIdHint) {
+        const [scenarioRes, lessonsRes] = await Promise.all([
+          scenarioService.getScenarioById(routeScenarioIdHint, { forceRefresh }),
+          sessionService.fetchSessionsByScenario(routeScenarioIdHint, { forceRefresh }),
+        ])
+        if (requestSeq !== loadRequestSeqRef.current) return
+        foundScenario = scenarioRes?.data ?? null
+        if (!foundLesson) {
+          const lessons = Array.isArray(lessonsRes?.data) ? lessonsRes.data : []
+          foundLesson = lessons.find((x) => String(x.sessionId) === String(stepId)) || null
+        }
+      } else {
+        const { data: scenarios } = await scenarioService.getScenarios({ forceRefresh })
+        if (requestSeq !== loadRequestSeqRef.current) return
+        for (const scenario of Array.isArray(scenarios) ? scenarios : []) {
+          const { data: lessons } = await sessionService.fetchSessionsByScenario(scenario.id, { forceRefresh })
+          if (requestSeq !== loadRequestSeqRef.current) return
+          const matched = Array.isArray(lessons)
+            ? lessons.find((x) => String(x.sessionId) === String(stepId))
+            : null
+          if (matched) {
+            foundScenario = scenario
+            foundLesson = matched
+            break
+          }
         }
       }
       if (!foundLesson) throw new Error('Không tìm thấy session hợp lệ cho màn chơi.')
+      if (requestSeq !== loadRequestSeqRef.current) return
 
-      setCampaignTitle(foundScenario?.title || 'Chiến dịch huấn luyện')
+      setCampaignTitle(foundScenario?.title || routeCampaignTitleHint || 'Chiến dịch huấn luyện')
       setScenarioRouteId(foundScenario?.id ? String(foundScenario.id) : '')
       setLesson(foundLesson)
 
@@ -325,7 +507,8 @@ Finance: ketoan01 / K3t0an@2026`
         landing: null,
       }
       try {
-        const ctxRes = await sessionService.fetchPlayContext(stepId)
+        const ctxRes = await sessionService.fetchPlayContext(stepId, { forceRefresh })
+        if (requestSeq !== loadRequestSeqRef.current) return
         if (ctxRes?.data) {
           playCtx = { ...playCtx, ...ctxRes.data }
         }
@@ -337,11 +520,13 @@ Finance: ketoan01 / K3t0an@2026`
       const stepTypeNorm = (playCtx.stepType || 'MAIL').toString().toUpperCase()
       let nextQueue = []
       try {
-        const inboxRes = await sessionService.fetchInboxEmailsForStep(stepId)
+        const inboxRes = await sessionService.fetchInboxEmailsForStep(stepId, { forceRefresh })
+        if (requestSeq !== loadRequestSeqRef.current) return
         nextQueue = mapApiInboxToQueue(inboxRes.data)
       } catch {
         nextQueue = []
       }
+      if (requestSeq !== loadRequestSeqRef.current) return
       if (nextQueue.length === 0) {
         nextQueue = buildQueueBySession(foundLesson, foundScenario?.title || 'CyberShield')
       }
@@ -365,7 +550,6 @@ Finance: ketoan01 / K3t0an@2026`
       setOpenedAttachmentIds([])
       setAttachmentModalOpen(false)
       setDecisionHistory([])
-      setZaloReply('')
       setStartedAtMs(Date.now())
       setIsFinished(false)
       setIsSubmittingResult(false)
@@ -373,9 +557,11 @@ Finance: ketoan01 / K3t0an@2026`
       setBrowserUser('')
       setBrowserPass('')
       setBrowserOtp('')
+      otpByEmailRef.current = {}
       setGeneratedOtp('')
       setActiveApp('mail')
     } catch (err) {
+      if (requestSeq !== loadRequestSeqRef.current) return
       setError(err?.response?.data?.message || err?.message || 'Không thể nạp dữ liệu màn chơi.')
       setScenarioRouteId('')
       setQueue([])
@@ -383,12 +569,17 @@ Finance: ketoan01 / K3t0an@2026`
       setPlayContext(null)
       setScenarioModel(null)
     } finally {
-      setIsLoading(false)
+      if (requestSeq === loadRequestSeqRef.current) {
+        setIsLoading(false)
+      }
     }
-  }, [stepId])
+  }, [routeCampaignTitleHint, routeLessonHint, routeScenarioIdHint, stepId])
 
   useEffect(() => {
     loadBySessionId()
+    return () => {
+      loadRequestSeqRef.current += 1
+    }
   }, [loadBySessionId])
 
   useEffect(() => {
@@ -398,14 +589,16 @@ Finance: ketoan01 / K3t0an@2026`
     setBrowserOtp('')
     gameActions.setPhoneWidgetVisible(false)
     webTrapSubmittedEmailRef.current = null
+    zaloSubmittedEmailRef.current = null
     setWebTrapBusy(false)
-    if (isMailOtpScenario && currentEmail) {
-      setGeneratedOtp(Math.floor(100000 + Math.random() * 900000).toString())
-      return
+    if (isMailOtpScenario && currentEmailNumericId != null) {
+      const existingOtp = otpByEmailRef.current[String(currentEmailNumericId)] || ''
+      setGeneratedOtp(existingOtp)
+    } else {
+      setGeneratedOtp('')
     }
-    setGeneratedOtp('')
     // Only reset on question boundary; omit gameActions from deps (link click changes its identity and would hide the widget).
-  }, [index, isMailOtpScenario, currentEmail?.id])
+  }, [index, isMailOtpScenario, currentEmailNumericId])
 
   const submitResult = useCallback(async (opts = {}) => {
     const deferDebrief = Boolean(opts?.deferDebrief)
@@ -562,18 +755,19 @@ Finance: ketoan01 / K3t0an@2026`
   const handleCloseBrowser = useCallback(() => {
     gameActions.setPhoneWidgetVisible(false)
     gameActions.closeBrowser()
-    setGeneratedOtp('')
   }, [gameActions])
 
   const handleEmailDecision = useCallback(
-    (action) => {
+    (action, options = {}) => {
       if (!canAct) return
       const isReport = action === 'QUARANTINE'
       const isVerified = action === 'VERIFIED'
+      const bypassAttachmentGate = Boolean(options?.bypassAttachmentGate)
       if (!isReport && !isVerified) return
       if (
         isVerified &&
         attachmentSpec &&
+        !bypassAttachmentGate &&
         !openedAttachmentIds.some((id) => String(id) === String(currentEmail?.id))
       ) {
         setIsShaking(true)
@@ -649,27 +843,36 @@ Finance: ketoan01 / K3t0an@2026`
   const handleLinkClick = useCallback(
     (url) => {
       if (!currentEmail) return
+      const resolvedUrl =
+        !url || url === '#'
+          ? activeBrowserTrap?.actualUrl ||
+            scenarioModel?.traps?.browser?.actualUrl ||
+            scenarioModel?.traps?.browser?.displayUrl
+          : url
       const shouldOpenBrowserTrap =
         scenarioModel?.traps?.browser?.enabled ||
         scenarioType === 'MAIL_WEB' ||
         isMailOtpScenario ||
-        (Boolean(currentEmail?.isPhishing) && Boolean(url))
+        (Boolean(currentEmail?.isPhishing) && Boolean(resolvedUrl))
       if (!shouldOpenBrowserTrap) return
       if (isMailOtpScenario) {
-        setGeneratedOtp(Math.floor(100000 + Math.random() * 900000).toString())
+        const otpForCurrentEmail = ensureOtpForEmail(currentEmailNumericId)
+        setGeneratedOtp(otpForCurrentEmail)
         gameActions.setPhoneWidgetVisible(true)
       }
 
       const trapId = `email-link-${currentEmail?.id ?? 'unknown'}`
       gameActions.markInspectedLink(trapId)
       gameActions.openBrowser({
-        url: url || scenarioModel?.traps?.browser?.actualUrl || scenarioModel?.traps?.browser?.displayUrl,
+        url: resolvedUrl,
         trapId,
         formType: isMailOtpScenario ? 'OTP' : scenarioModel?.traps?.browser?.formType || 'CREDENTIAL',
       })
+      // Ensure browser window jumps above Gmail right when opened.
+      bringToFront('browser')
       setActiveApp('browser')
     },
-    [currentEmail, gameActions, isMailOtpScenario, scenarioModel, scenarioType],
+    [activeBrowserTrap?.actualUrl, bringToFront, currentEmail, currentEmailNumericId, ensureOtpForEmail, gameActions, isMailOtpScenario, scenarioModel, scenarioType],
   )
 
   const handleFileDownload = useCallback(
@@ -702,7 +905,11 @@ Finance: ketoan01 / K3t0an@2026`
       if (prev.some((x) => String(x) === String(id))) return prev
       return [...prev, id]
     })
-  }, [appendTrapVerifiedDecision, currentEmail, gameActions])
+    if (scenarioType === 'MAIL_FILE') {
+      // MAIL+FILE: verify flow is fully driven from download action.
+      handleEmailDecision('VERIFIED', { bypassAttachmentGate: true })
+    }
+  }, [appendTrapVerifiedDecision, currentEmail, gameActions, handleEmailDecision, scenarioType])
 
   const handleReportPhishing = useCallback(() => {
     handleEmailDecision('QUARANTINE')
@@ -711,6 +918,52 @@ Finance: ketoan01 / K3t0an@2026`
   const handleVerifyMail = useCallback(() => {
     handleEmailDecision('VERIFIED')
   }, [handleEmailDecision])
+
+  const refreshSession = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      window.location.reload()
+    }
+  }, [])
+
+  const handleTrustZalo = useCallback(
+    (text = '') => {
+      if (!currentEmail || !canAct) return
+      const rawId = currentEmail?.id
+      const emailId =
+        typeof rawId === 'number' ? rawId : Number.parseInt(String(rawId), 10) || index + 1
+      if (zaloSubmittedEmailRef.current === emailId) return
+      zaloSubmittedEmailRef.current = emailId
+
+      const decision = {
+        emailId,
+        isPhishing: Boolean(currentEmail?.isPhishing),
+        userAction: 'VERIFIED',
+        payload: String(text || '').trim(),
+      }
+      setDecisionHistory((prev) => [...prev, decision])
+      gameActions.commitDecision('VERIFIED')
+
+      if (currentEmail?.isPhishing) {
+        setStatus('GAME_OVER')
+        setGameOverEmail(currentEmail)
+        setGameOverNonMail(false)
+        setIsFinished(false)
+        return
+      }
+
+      const nextScore = scoreRef.current + SCORE_CORRECT
+      scoreRef.current = nextScore
+      setScore(nextScore)
+      const nextIndex = index + 1
+      if (nextIndex >= queue.length) {
+        setStatus(nextScore < 0 ? 'GAME_OVER' : 'VICTORY')
+        setIsFinished(true)
+      } else {
+        setIndex(nextIndex)
+      }
+    },
+    [canAct, currentEmail, gameActions, index, queue.length],
+  )
 
   const handleSubmitBrowserTrap = useCallback(async () => {
     if (!currentEmail) return
@@ -752,11 +1005,7 @@ Finance: ketoan01 / K3t0an@2026`
         }
         setDecisionHistory((prev) => [...prev, trustedDecision])
         gameActions.commitDecision('VERIFIED')
-        const delta = currentEmail?.isPhishing
-          ? -SCORE_FALSE_REPORT
-          : credentialsMatch
-            ? SCORE_CORRECT
-            : -SCORE_FALSE_REPORT
+        const delta = currentEmail?.isPhishing ? 0 : credentialsMatch ? SCORE_CORRECT : -SCORE_FALSE_REPORT
         const nextScore = scoreRef.current + delta
         scoreRef.current = nextScore
         setScore(nextScore)
@@ -764,6 +1013,15 @@ Finance: ketoan01 / K3t0an@2026`
         gameActions.setPhoneWidgetVisible(false)
         setBrowserUser('')
         setBrowserPass('')
+        if (currentEmail?.isPhishing) {
+          setStatus('GAME_OVER')
+          setGameOverEmail(currentEmail || null)
+          setGameOverNonMail(true)
+          setIsFinished(false)
+          hasSubmittedRef.current = false
+          await submitResult({ deferDebrief: true, immediateDecisions: [trustedDecision] })
+          return
+        }
         const nextIndex = index + 1
         if (nextIndex >= queue.length) {
           const failedByCredentials = !currentEmail?.isPhishing && !credentialsMatch
@@ -776,9 +1034,10 @@ Finance: ketoan01 / K3t0an@2026`
       }
 
       if (isMailOtpScenario) {
+        const expectedOtp = generatedOtp || ensureOtpForEmail(emailId)
         mailOtpSnapshotRef.current = {
           entered: browserOtp.trim(),
-          expected: generatedOtp,
+          expected: expectedOtp,
           emailId,
         }
       } else {
@@ -801,7 +1060,8 @@ Finance: ketoan01 / K3t0an@2026`
             return
           }
         }
-        const otpMatched = browserOtp.trim() === generatedOtp
+        const otpExpected = generatedOtp || mailOtpSnapshotRef.current?.expected || ensureOtpForEmail(emailId)
+        const otpMatched = browserOtp.trim() === otpExpected
         if (!otpMatched) {
           if (isMailOtpScenario) {
             const wrongDecision = {
@@ -986,19 +1246,24 @@ Finance: ketoan01 / K3t0an@2026`
         ) : null}
 
         <div
-          className="pointer-events-none absolute inset-0 flex items-center justify-center"
-          style={{ zIndex: activeApp === 'mail' ? 100 : 50 }}
+          className="pointer-events-none absolute inset-0"
+          style={{ zIndex: windowZ.mail }}
         >
           <Draggable
             nodeRef={mailWindowNodeRef}
-            handle=".window-header"
-            onStart={() => setActiveApp('mail')}
+            cancel="button,input,textarea,a,.no-drag,.scrollable-content"
+            defaultPosition={scenarioType === 'MAIL_ZALO' ? flow5Layout.gmail : { x: 240, y: 60 }}
+            onStart={() => bringToFront('mail')}
           >
-            <div ref={mailWindowNodeRef} className="pointer-events-auto">
+            <div
+              ref={mailWindowNodeRef}
+              className="pointer-events-auto inline-block w-fit cursor-grab active:cursor-grabbing"
+              onMouseDown={() => bringToFront('mail')}
+            >
             <AppWindow
               title={appWindowTitle}
               className="w-[920px] h-[640px]"
-              onMouseDown={() => setActiveApp('mail')}
+              onMouseDown={() => bringToFront('mail')}
             >
               {isLoading ? (
                 <div className="h-full animate-pulse bg-slate-900/60" />
@@ -1029,6 +1294,7 @@ Finance: ketoan01 / K3t0an@2026`
                   onFileDownload={handleFileDownload}
                   onLinkClick={handleLinkClick}
                   onVerifyMail={handleVerifyMail}
+                  showVerifyAction={scenarioType === 'MAIL_ZALO' ? !zaloVerifyConfig.required : undefined}
                   mailOtpMode={false}
                   isShaking={isShaking}
                 />
@@ -1041,22 +1307,26 @@ Finance: ketoan01 / K3t0an@2026`
         {scenarioType === 'MAIL_WEB' ? (
           <div
             className="pointer-events-none absolute inset-0"
-            style={{ zIndex: activeApp === 'notepad' ? 95 : 60 }}
+            style={{ zIndex: windowZ.notepad }}
           >
             <Draggable
               nodeRef={notepadWindowNodeRef}
-              handle=".window-header"
+              cancel="button,input,textarea,a,.no-drag,.scrollable-content"
               defaultPosition={notepadDefaultPosition}
-              onStart={() => setActiveApp('notepad')}
+              onStart={() => bringToFront('notepad')}
             >
-              <div ref={notepadWindowNodeRef} className="pointer-events-auto">
+              <div
+                ref={notepadWindowNodeRef}
+                className="pointer-events-auto inline-block w-fit cursor-grab active:cursor-grabbing"
+                onMouseDown={() => bringToFront('notepad')}
+              >
                 <AppWindow
                   title="Passwords.txt - Notepad"
-                  className="h-[360px] w-[290px]"
-                  onMouseDown={() => setActiveApp('notepad')}
+                  className="h-[360px] w-[335px]"
+                  onMouseDown={() => bringToFront('notepad')}
                 >
                   <div className="h-full bg-[#f4f4f4] p-2">
-                    <pre className="h-full overflow-auto whitespace-pre-wrap bg-white p-2 font-mono text-[11px] leading-relaxed text-slate-800">
+                    <pre className="scrollable-content h-full overflow-auto whitespace-pre-wrap bg-white p-2 font-mono text-[12px] leading-[1.5] text-slate-800">
                       {notepadContent}
                     </pre>
                   </div>
@@ -1067,52 +1337,88 @@ Finance: ketoan01 / K3t0an@2026`
         ) : null}
 
         {scenarioType === 'MAIL_ZALO' ? (
-          <Draggable
-            nodeRef={chatWindowNodeRef}
-            handle=".window-header"
-            defaultPosition={{ x: 960, y: 150 }}
-            onStart={() => setActiveApp('chat')}
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{ zIndex: windowZ.policy }}
           >
-            <div ref={chatWindowNodeRef}>
-              <AppWindow
-                title="CompanyChat - Zalo"
-                className="w-[350px] h-[550px]"
-                onMouseDown={() => setActiveApp('chat')}
+            <Draggable
+              nodeRef={policyWindowNodeRef}
+              cancel="button,input,textarea,a,.no-drag,.scrollable-content"
+              defaultPosition={flow5Layout.policy}
+              onStart={() => bringToFront('policy')}
+            >
+              <div
+                ref={policyWindowNodeRef}
+                className="pointer-events-auto inline-block w-fit cursor-grab active:cursor-grabbing"
+                onMouseDown={() => bringToFront('policy')}
               >
-                <FakeZaloPanel
-                  content={playContext?.content}
-                  replyText={zaloReply}
-                  onReplyChange={setZaloReply}
-                  onReport={handleReportPhishing}
-                  onTrustSend={() => {}}
-                  canReport={canAct}
-                  canTrustSend={false}
-                />
-              </AppWindow>
-            </div>
-          </Draggable>
+                <AppWindow
+                  title="Company Policy Doc"
+                  className="h-[520px] w-[345px]"
+                  onMouseDown={() => bringToFront('policy')}
+                >
+                  <CompanyPolicy rules={policyRules} sections={policySections} />
+                </AppWindow>
+              </div>
+            </Draggable>
+          </div>
+        ) : null}
+
+        {scenarioType === 'MAIL_ZALO' ? (
+          <div className="pointer-events-none absolute inset-0" style={{ zIndex: windowZ.chat }}>
+            <Draggable
+              nodeRef={chatWindowNodeRef}
+              cancel="button,input,textarea,a,.no-drag,.scrollable-content"
+              defaultPosition={flow5Layout.chat}
+              onStart={() => bringToFront('chat')}
+            >
+              <div
+                ref={chatWindowNodeRef}
+                className="pointer-events-auto inline-block w-fit cursor-grab active:cursor-grabbing"
+                onMouseDown={() => bringToFront('chat')}
+              >
+                <AppWindow
+                  title="CompanyChat - Zalo"
+                  className="w-[350px] h-[550px]"
+                  onMouseDown={() => bringToFront('chat')}
+                >
+                  <FakeZaloPanel
+                  content={activeZaloContent}
+                    onTrustSend={handleTrustZalo}
+                    canTrustSend={canAct}
+                  fixedReplyText={zaloVerifyConfig.autoReply}
+                  verifyRequired={zaloVerifyConfig.required}
+                  />
+                </AppWindow>
+              </div>
+            </Draggable>
+          </div>
         ) : null}
 
         {gameState.ui.isBrowserOpen ? (
           <div
             className="absolute inset-0 pointer-events-none"
-            style={{ zIndex: activeApp === 'browser' ? 100 : 50 }}
+            style={{ zIndex: windowZ.browser }}
           >
             <Draggable
               nodeRef={browserWindowNodeRef}
-              handle=".window-header"
+              cancel="button,input,textarea,a,.no-drag,.scrollable-content"
               defaultPosition={{ x: 240, y: 100 }}
-              onStart={() => setActiveApp('browser')}
+              onStart={() => bringToFront('browser')}
             >
               <div
                 ref={browserWindowNodeRef}
-                className="absolute pointer-events-auto overflow-hidden rounded-xl border border-slate-500 bg-white shadow-2xl"
-                onMouseDown={() => setActiveApp('browser')}
+                className="absolute pointer-events-auto inline-block w-fit overflow-hidden rounded-xl border border-slate-500 bg-white shadow-2xl cursor-grab active:cursor-grabbing"
+                onMouseDown={() => bringToFront('browser')}
               >
                 <div className="h-[600px] w-[800px]">
                   <FakeBrowserWindow
-                    title={scenarioModel?.traps?.browser?.title}
-                    displayUrl={scenarioModel?.traps?.browser?.displayUrl || gameState.trap.openedUrl}
+                    title={activeBrowserTrap?.title || scenarioModel?.traps?.browser?.title}
+                    displayUrl={
+                      activeBrowserTrap?.displayUrl ||
+                      scenarioModel?.traps?.browser?.displayUrl ||
+                      gameState.trap.openedUrl
+                    }
                     webType={activeWebType}
                     formType={isMailOtpScenario ? 'OTP' : scenarioModel?.traps?.browser?.formType}
                     loginUser={browserUser}
@@ -1168,7 +1474,7 @@ Finance: ketoan01 / K3t0an@2026`
             }
             setIsFinished(true)
           }}
-          onRetry={loadBySessionId}
+          onRetry={refreshSession}
         />
       ) : null}
 
@@ -1198,7 +1504,7 @@ Finance: ketoan01 / K3t0an@2026`
               timeTakenSeconds={debriefData.timeTakenSeconds}
               onRetry={() => {
                 setDebriefData(null)
-                loadBySessionId()
+                refreshSession()
               }}
               onBackCampaign={() => navigate('/campaigns')}
             />
