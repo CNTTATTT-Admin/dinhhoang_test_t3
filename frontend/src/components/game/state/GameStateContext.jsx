@@ -56,7 +56,12 @@ function reducer(state, action) {
     case 'CLOSE_BROWSER':
       return {
         ...state,
-        ui: { ...state.ui, isBrowserOpen: false, activeOverlay: 'none' },
+        ui: {
+          ...state.ui,
+          isBrowserOpen: false,
+          isPhoneWidgetVisible: false,
+          activeOverlay: 'none',
+        },
       }
     case 'MARK_INSPECT_SENDER':
       return {

@@ -45,6 +45,8 @@ public class GameplayService {
 
     private static final String ACTION_VERIFIED = "VERIFIED";
     private static final String ACTION_QUARANTINE = "QUARANTINE";
+    private static final int SCORE_CORRECT = 120;
+    private static final int SCORE_PENALTY = 120;
 
     private final UserRepository userRepository;
     private final TrainingSessionRepository trainingSessionRepository;
@@ -73,7 +75,7 @@ public class GameplayService {
         return new PlayContextResponse(stepType, contentForClient, phishingScenario, landing);
     }
 
-    /** Không gửi otpCode xuống client — chỉ có trong email đã chèn ở listInboxEmails. */
+    /** Không gửi otpCode xuống client (legacy seed); MAIL_OTP không còn mã cố định trong DB. */
     private String stripOtpCodeFromContentForClient(String content) {
         if (content == null || content.isBlank()) {
             return content;
@@ -89,21 +91,6 @@ public class GameplayService {
         } catch (Exception e) {
             return content;
         }
-    }
-
-    private String extractOtpCodeFromStepContent(String content) {
-        if (content == null || content.isBlank()) {
-            return "";
-        }
-        try {
-            JsonNode root = objectMapper.readTree(content);
-            if (root.has("otpCode") && root.get("otpCode").isTextual()) {
-                return root.get("otpCode").asText().trim();
-            }
-        } catch (Exception ignored) {
-            // ignore
-        }
-        return "";
     }
 
     private PlayContextResponse.LandingInfo toLandingInfo(LandingPage lp) {
@@ -140,27 +127,8 @@ public class GameplayService {
         if (!"MAIL_OTP".equals(stepType)) {
             return list;
         }
-        String otp = extractOtpCodeFromStepContent(step.getContent());
-        if (otp.isEmpty()) {
-            return list;
-        }
-        String finalOtp = otp;
-        return list.stream()
-                .map(r -> new VirtualInboxEmailResponse(
-                        r.id(),
-                        r.sortOrder(),
-                        r.slotTag(),
-                        r.senderEmail(),
-                        r.senderName(),
-                        r.subject(),
-                        r.body().replace("{{OTP}}", finalOtp).replace("{{OTP_CODE}}", finalOtp),
-                        r.linkUrl(),
-                        r.linkLabel(),
-                        r.isPhishing(),
-                        r.redFlags(),
-                        r.attachmentJson()
-                ))
-                .toList();
+        // Ma OTP do frontend sinh / hien thi tren PhoneOtpWidget — khong chen ma co dinh tu DB.
+        return list;
     }
 
     @Transactional
@@ -183,7 +151,7 @@ public class GameplayService {
         session.setStartedAt(LocalDateTime.now().minusSeconds(Math.max(1, request.timeTakenSeconds())));
 
         session.setEndedAt(LocalDateTime.now());
-        session.setScoreGained(request.finalScore());
+        session.setScoreGained(0);
         session.setStatus("IN_PROGRESS");
         // Campaign gameplay is treated as tutorial for dashboard analytics (anti-farm metrics).
         session.setTutorialMode(true);
@@ -193,6 +161,7 @@ public class GameplayService {
         List<GameplayDecision> gameplayDecisions = request.gameplayDecisions() == null ? List.of() : request.gameplayDecisions();
         int falsePositive = 0;
         int falseNegative = 0;
+        int serverAdjustedScore = 0;
         List<String> feedbackMessages = new ArrayList<>();
 
         List<ScenarioStep> scenarioSteps = scenarioStepRepository
@@ -200,12 +169,14 @@ public class GameplayService {
         String stepType = currentStep.getStepType() == null ? "MAIL" : currentStep.getStepType().toUpperCase(Locale.ROOT);
         boolean isMailOtp = "MAIL_OTP".equals(stepType);
         boolean isMailOnly = "MAIL".equals(stepType);
+        boolean isMailWeb = "WEB_PAGE".equals(stepType);
         boolean mailLike = isMailOnly || isMailOtp;
+        boolean useEmailDecisions = !emailDecisions.isEmpty();
 
         int decisionCount;
         if (isMailOtp) {
             decisionCount = emailDecisions.size() + 1;
-        } else if (mailLike) {
+        } else if (useEmailDecisions) {
             decisionCount = emailDecisions.size();
         } else {
             decisionCount = gameplayDecisions.size();
@@ -214,7 +185,7 @@ public class GameplayService {
                 ? 0f
                 : Math.max(0f, request.timeTakenSeconds()) / decisionCount;
 
-        if (mailLike) {
+        if (useEmailDecisions) {
             Set<Long> validEmailIds = virtualInboxEmailRepository.findByScenarioStep_IdOrderBySortOrderAsc(stepId)
                     .stream()
                     .map(VirtualInboxEmail::getId)
@@ -222,28 +193,65 @@ public class GameplayService {
             boolean enforceInboxIds = !validEmailIds.isEmpty();
 
             for (EmailDecision decision : emailDecisions) {
-                if (enforceInboxIds && !validEmailIds.contains(decision.emailId())) {
+                if (enforceInboxIds && !validEmailIds.contains(decision.getEmailId())) {
                     throw new RuntimeException("emailId không khớp với hàng đợi của bài học.");
                 }
-                String action = normalizeAction(decision.userAction());
-                boolean actualPhishing = Boolean.TRUE.equals(decision.isPhishing());
+                VirtualInboxEmail sourceEmail = virtualInboxEmailRepository.findById(decision.getEmailId())
+                        .orElse(null);
+                if (sourceEmail == null) {
+                    throw new RuntimeException("Không tìm thấy email trong hàng đợi để chấm điểm.");
+                }
+                String action = normalizeAction(decision.getUserAction());
+                // Luôn dùng ground truth từ DB; không tin cờ isPhishing do client gửi lên.
+                boolean actualPhishing = sourceEmail.isPhishing();
                 boolean markedQuarantine = ACTION_QUARANTINE.equals(action);
-                boolean isCorrect = (actualPhishing && markedQuarantine) || (!actualPhishing && !markedQuarantine);
+                boolean isCorrect = markedQuarantine == actualPhishing;
+                boolean enteredProvided = decision.getPayload() != null
+                        && !decision.getPayload().isBlank()
+                        && decision.getExpectedPayload() != null
+                        && !decision.getExpectedPayload().isBlank();
+                boolean isVerifiedLegit = ACTION_VERIFIED.equals(action) && !actualPhishing;
+                boolean credentialsMatch = enteredProvided
+                        && decision.getExpectedPayload().trim().equals(decision.getPayload().trim());
+
+                if (isMailWeb && isVerifiedLegit) {
+                    // Flow 3: với mail hợp lệ, chỉ tính đúng khi user/pass nhập vào khớp dữ liệu chuẩn.
+                    isCorrect = credentialsMatch;
+                }
+                serverAdjustedScore += isCorrect ? SCORE_CORRECT : -SCORE_PENALTY;
 
                 if (!actualPhishing && markedQuarantine) {
                     falsePositive++;
-                    feedbackMessages.add(buildFeedback(decision.emailId(),
-                            "False Positive: Đây là mail an toàn nhưng bạn đã quarantine."));
+                    feedbackMessages.add(buildFeedback(decision.getEmailId(),
+                            "False Positive: Bạn đã chặn một email an toàn từ hệ thống."));
                 } else if (actualPhishing && !markedQuarantine) {
                     falseNegative++;
-                    feedbackMessages.add(buildFeedback(decision.emailId(),
-                            "False Negative: Bạn đã tin tưởng mail phishing. Đây là lỗi nguy hiểm."));
+                    if (enteredProvided) {
+                        feedbackMessages.add(buildFeedback(decision.getEmailId(),
+                                "Bạn đã để lộ thông tin tài khoản trên trang web giả mạo."));
+                    } else {
+                        feedbackMessages.add(buildFeedback(decision.getEmailId(),
+                                "False Negative: Bạn đã tin tưởng mail phishing. Đây là lỗi nguy hiểm."));
+                    }
+                }
+
+                if (isMailWeb
+                        && isVerifiedLegit
+                        && !credentialsMatch) {
+                    falsePositive++;
+                    feedbackMessages.add(buildFeedback(decision.getEmailId(),
+                            "[SAI] Tài khoản hoặc mật khẩu không chính xác. Bạn đã nhập thông tin sai lệch."));
+                } else if (isMailWeb
+                        && isVerifiedLegit
+                        && credentialsMatch) {
+                    feedbackMessages.add(buildFeedback(decision.getEmailId(),
+                            "[CHÍNH XÁC] Đăng nhập thành công hệ thống nội bộ."));
                 }
 
                 SessionDetail detail = new SessionDetail();
                 detail.setSession(session);
                 detail.setStep(currentStep);
-                detail.setItemId(decision.emailId());
+                detail.setItemId(decision.getEmailId());
                 detail.setUserAction(markedQuarantine ? "REPORT" : "VERIFIED");
                 detail.setResponseTime(avgDecisionTime);
                 detail.setCorrect(isCorrect);
@@ -257,17 +265,30 @@ public class GameplayService {
                 throw new RuntimeException("Thiếu gameplayDecisions (OTP) cho bài MAIL_OTP.");
             }
             Optional<GameplayDecision> otpDecision = gameplayDecisions.stream()
-                    .filter(d -> "OTP_SUBMIT".equals(d.decisionType()))
+                    .filter(d -> "OTP_SUBMIT".equals(d.getDecisionType()))
                     .findFirst();
             if (otpDecision.isEmpty()) {
                 throw new RuntimeException("Thiếu quyết định OTP_SUBMIT cho bài MAIL_OTP.");
             }
-            String expectedOtp = extractOtpCodeFromStepContent(currentStep.getContent());
-            String entered = otpDecision.get().payload() == null ? "" : otpDecision.get().payload().trim();
+            GameplayDecision gd = otpDecision.get();
+            String entered = gd.getPayload() == null ? "" : gd.getPayload().trim();
+            String expectedOtp = gd.getExpectedPayload() == null ? "" : gd.getExpectedPayload().trim();
+            if (expectedOtp.isEmpty()) {
+                for (int i = emailDecisions.size() - 1; i >= 0; i--) {
+                    EmailDecision ed = emailDecisions.get(i);
+                    if (ed.getPayload() != null && ed.getExpectedPayload() != null) {
+                        entered = ed.getPayload().trim();
+                        expectedOtp = ed.getExpectedPayload().trim();
+                        break;
+                    }
+                }
+            }
             otpMatch = !expectedOtp.isEmpty() && expectedOtp.equals(entered);
             if (!otpMatch) {
                 falseNegative++;
-                feedbackMessages.add("Mã OTP không khớp với mã đã gửi trong email. Đối chiếu từng ký tự.");
+                feedbackMessages.add(
+                        "Mã OTP không chính xác. Bạn cần kiểm tra thiết bị nhận tin nhắn cẩn thận hơn."
+                );
             }
 
             SessionDetail otpDetail = new SessionDetail();
@@ -280,15 +301,16 @@ public class GameplayService {
             sessionDetailRepository.save(otpDetail);
         }
 
-        if (!mailLike) {
+        if (!useEmailDecisions) {
             if (gameplayDecisions.isEmpty()) {
                 throw new RuntimeException("Thiếu gameplayDecisions cho bài " + stepType + ".");
             }
             boolean scenarioPhishing = resolvePhishingScenario(currentStep);
             for (GameplayDecision decision : gameplayDecisions) {
-                String action = normalizeAction(decision.userAction());
+                String action = normalizeAction(decision.getUserAction());
                 boolean markedQuarantine = ACTION_QUARANTINE.equals(action);
                 boolean isCorrect = (scenarioPhishing && markedQuarantine) || (!scenarioPhishing && !markedQuarantine);
+                serverAdjustedScore += isCorrect ? SCORE_CORRECT : -SCORE_PENALTY;
 
                 if (!scenarioPhishing && markedQuarantine) {
                     falsePositive++;
@@ -309,7 +331,9 @@ public class GameplayService {
             }
         }
 
-        boolean passed = falseNegative == 0 && session.getScoreGained() >= 0 && otpMatch;
+        session.setScoreGained(serverAdjustedScore);
+        // Chỉ pass khi không có cả falseNegative lẫn falsePositive.
+        boolean passed = falseNegative == 0 && falsePositive == 0 && session.getScoreGained() >= 0 && otpMatch;
         session.setStatus(passed ? "COMPLETED" : "FAILED");
         trainingSessionRepository.save(session);
 
@@ -324,7 +348,8 @@ public class GameplayService {
                 });
 
         int previousHighestStep = Math.max(0, progress.getHighestStepReached());
-        int reached = passed ? currentStep.getStepOrder() : Math.max(1, previousHighestStep);
+        // Chỉ ghi nhận tiến độ khi thắng; thất bại không được tự động coi như đã hoàn thành step hiện tại.
+        int reached = passed ? currentStep.getStepOrder() : previousHighestStep;
         progress.setHighestStepReached(Math.max(progress.getHighestStepReached(), reached));
         progress.setBestScore(Math.max(progress.getBestScore(), session.getScoreGained()));
 
@@ -369,6 +394,7 @@ public class GameplayService {
         return new SessionSubmitResponse(
                 earnedExp,
                 user.getTotalExp(),
+                session.getScoreGained(),
                 passed,
                 feedbackMessages
         );
