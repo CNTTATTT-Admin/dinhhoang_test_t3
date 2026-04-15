@@ -36,7 +36,7 @@ export default function MailAttachmentSimulator({ open, spec, onClose, onReviewe
   if (!open || !spec) return null
 
   return (
-    <div className="absolute inset-0 z-[180] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[4000] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm">
       <div className="flex w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-slate-600 bg-slate-900 shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-700 bg-[#1e293b] px-3 py-2">
           <div className="flex items-center gap-2 text-xs font-medium text-slate-200">

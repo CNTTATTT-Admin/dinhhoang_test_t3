@@ -13,7 +13,7 @@ export function createInitialGameState() {
 }
 
 /**
- * @param {typeof import('./mockEmails.js').SURVIVAL_INBOX_MOCK_EMAILS} emails
+ * @param {{ isPhishing: boolean }[]} emails
  * @param {boolean} isReported true = BÁO CÁO PHISHING, false = TIN TƯỞNG
  */
 function reduceDecision(state, emails, isReported) {
@@ -59,7 +59,7 @@ function gameReducer(state, action) {
 }
 
 /**
- * @param {import('./mockEmails.js').SURVIVAL_INBOX_MOCK_EMAILS} emails
+ * @param {{ isPhishing: boolean }[]} emails
  */
 export function useSurvivalInboxGame(emails) {
   const [state, dispatch] = useReducer(gameReducer, undefined, createInitialGameState)

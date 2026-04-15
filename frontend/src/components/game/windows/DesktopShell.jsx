@@ -55,11 +55,11 @@ export function AppWindow({ children, title, className = '', onMouseDown }) {
     <div
       onMouseDown={onMouseDown}
       className={[
-        'relative bg-slate-900 border border-slate-700 shadow-2xl rounded-lg overflow-hidden flex flex-col',
+        'relative bg-slate-900 border border-slate-700 shadow-2xl rounded-lg overflow-hidden flex flex-col cursor-grab active:cursor-grabbing',
         className,
       ].join(' ')}
     >
-      <div className="h-10 bg-slate-800 flex items-center px-4 cursor-grab active:cursor-grabbing window-header border-b border-slate-700">
+      <div className="h-10 bg-slate-800 flex items-center px-4 window-header border-b border-slate-700">
         <div className="mr-3 flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
           <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
