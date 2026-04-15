@@ -77,7 +77,7 @@ public class UserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng!"));
 
-        List<SessionDetail> details = sessionDetailRepository.findBySessionUserId(user.getId());
+        List<SessionDetail> details = sessionDetailRepository.findBySessionUserIdAndSessionTutorialModeFalse(user.getId());
 
         long phishingHandledCorrect = 0;
         long phishingTotal = 0;
@@ -131,15 +131,15 @@ public class UserService {
                 ? Math.max(0d, user.getAvgResponseTime())
                 : calculateMedian(responseTimes);
 
-        long leakEvents = dataLeakRepository.countByUserId(user.getId());
+        long leakEvents = dataLeakRepository.countByUserIdAndSessionTutorialModeFalse(user.getId());
         long totalCriticalEvents = phishingTotal;
         double rawLeakPreventionRate = totalCriticalEvents <= 0
                 ? 50d
                 : Math.max(0d, 1d - (leakEvents * 1d / totalCriticalEvents)) * 100d;
         double leakPreventionRate = smoothRate(rawLeakPreventionRate, totalCriticalEvents, 10, 50d);
 
-        long totalSessions = trainingSessionRepository.countByUserId(user.getId());
-        long leakedSessions = dataLeakRepository.countDistinctSessionIdByUserId(user.getId());
+        long totalSessions = trainingSessionRepository.countByUserIdAndTutorialModeFalse(user.getId());
+        long leakedSessions = dataLeakRepository.countDistinctSessionIdByUserIdAndSessionTutorialModeFalse(user.getId());
         double rawCleanSessionRate = totalSessions == 0
                 ? 50d
                 : Math.max(0d, ((totalSessions - leakedSessions) * 100d) / totalSessions);

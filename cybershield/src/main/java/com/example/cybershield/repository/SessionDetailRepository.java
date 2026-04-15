@@ -11,4 +11,5 @@ import java.util.UUID;
 public interface SessionDetailRepository extends JpaRepository<SessionDetail, UUID> {
     List<SessionDetail> findBySessionUserIdAndStepScenarioId(UUID userId, UUID scenarioId);
     List<SessionDetail> findBySessionUserId(UUID userId);
+    List<SessionDetail> findBySessionUserIdAndSessionTutorialModeFalse(UUID userId);
 }

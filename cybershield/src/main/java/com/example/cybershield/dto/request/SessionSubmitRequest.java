@@ -13,7 +13,10 @@ public record SessionSubmitRequest(
         Integer timeTakenSeconds,
 
         @Valid
-        List<EmailDecision> emailDecisions
+        List<EmailDecision> emailDecisions,
+
+        @Valid
+        List<GameplayDecision> gameplayDecisions
 ) {
 }
 

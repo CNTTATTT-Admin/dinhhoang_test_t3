@@ -24,4 +24,8 @@ public class SessionDetail {
     private String userAction; // REPORT, CLICK_LINK, INPUT
     private float responseTime;
     private boolean isCorrect;
+
+    /** Khóa tới VirtualInboxEmail.id khi quyết định thuộc inbox (nullable cho mode khác). */
+    @Column(name = "item_id")
+    private Long itemId;
 }

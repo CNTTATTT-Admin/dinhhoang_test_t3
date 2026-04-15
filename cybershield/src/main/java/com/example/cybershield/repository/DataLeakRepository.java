@@ -10,4 +10,6 @@ import java.util.UUID;
 public interface DataLeakRepository extends JpaRepository<DataLeak, UUID> {
     long countByUserId(UUID userId);
     long countDistinctSessionIdByUserId(UUID userId);
+    long countByUserIdAndSessionTutorialModeFalse(UUID userId);
+    long countDistinctSessionIdByUserIdAndSessionTutorialModeFalse(UUID userId);
 }

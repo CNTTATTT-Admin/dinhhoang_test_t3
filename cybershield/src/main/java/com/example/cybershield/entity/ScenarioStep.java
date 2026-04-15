@@ -18,7 +18,7 @@ public class ScenarioStep {
     private Scenario scenario;
 
     private int stepOrder;
-    private String stepType; // MAIL, ZALO, WEB_PAGE, OTP
+    private String stepType; // MAIL, MAIL_OTP, ZALO, WEB_PAGE, OTP
 
     @Column(columnDefinition = "TEXT")
     private String content; // JSON string chứa HTML/Tin nhắn

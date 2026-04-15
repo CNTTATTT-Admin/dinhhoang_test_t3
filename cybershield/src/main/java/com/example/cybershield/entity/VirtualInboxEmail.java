@@ -18,6 +18,19 @@ public class VirtualInboxEmail {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** Bài học (bước scenario) sở hữu hàng đợi mail này. Nullable để tương thích bản cũ. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "scenario_step_id")
+    private ScenarioStep scenarioStep;
+
+    /** Thứ tự trong hàng đợi (1..n). */
+    @Column(nullable = false)
+    private int sortOrder = 0;
+
+    /** Gợi ý pha trộn: ví dụ EASY_PHISH, LEGIT, MID_PHISH, BOSS. */
+    @Column(length = 32)
+    private String slotTag;
+
     @Column(nullable = false)
     private String senderEmail;
 
@@ -37,6 +50,13 @@ public class VirtualInboxEmail {
 
     @Column(name = "is_phishing", nullable = false)
     private boolean phishing;
+
+    /**
+     * JSON mô phỏng file tải từ link (tên file, nội dung xem trước, cảnh báo).
+     * Nullable — email không có bước mở file thì để trống.
+     */
+    @Column(name = "attachment_json", columnDefinition = "TEXT")
+    private String attachmentJson;
 
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(

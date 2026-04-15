@@ -27,5 +27,6 @@ public class TrainingSession {
 
     private int scoreGained;
     private String status; // COMPLETED, FAILED, LEAKED
+    private boolean tutorialMode;
 }
 

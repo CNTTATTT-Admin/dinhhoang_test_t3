@@ -9,6 +9,7 @@ public record SessionSelectorResponse(
         UUID sessionId,
         UUID scenarioId,
         int stepOrder,
+        String stepType,
         String lessonTitle,
         int threatLevel,
         String objective,

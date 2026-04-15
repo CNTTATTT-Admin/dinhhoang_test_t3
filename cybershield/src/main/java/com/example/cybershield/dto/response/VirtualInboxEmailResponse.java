@@ -6,6 +6,8 @@ import java.util.List;
 
 public record VirtualInboxEmailResponse(
         Long id,
+        int sortOrder,
+        String slotTag,
         String senderEmail,
         String senderName,
         String subject,
@@ -13,11 +15,14 @@ public record VirtualInboxEmailResponse(
         String linkUrl,
         String linkLabel,
         boolean isPhishing,
-        List<String> redFlags
+        List<String> redFlags,
+        String attachmentJson
 ) {
     public static VirtualInboxEmailResponse fromEntity(VirtualInboxEmail entity) {
         return new VirtualInboxEmailResponse(
                 entity.getId(),
+                entity.getSortOrder(),
+                entity.getSlotTag(),
                 entity.getSenderEmail(),
                 entity.getSenderName(),
                 entity.getSubject(),
@@ -25,7 +30,8 @@ public record VirtualInboxEmailResponse(
                 entity.getLinkUrl(),
                 entity.getLinkLabel(),
                 entity.isPhishing(),
-                entity.getRedFlags() != null ? List.copyOf(entity.getRedFlags()) : List.of()
+                entity.getRedFlags() != null ? List.copyOf(entity.getRedFlags()) : List.of(),
+                entity.getAttachmentJson()
         );
     }
 }
