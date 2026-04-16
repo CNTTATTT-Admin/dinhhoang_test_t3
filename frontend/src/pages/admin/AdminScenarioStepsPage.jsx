@@ -253,7 +253,7 @@ export default function AdminScenarioStepsPage() {
     <AdminLayout>
       <div className="max-w-6xl">
         <div className="mb-6">
-          <h1 className="text-2xl font-extrabold tracking-tight">
+          <h1 className="text-2xl font-extrabold tracking-tight" style={{ color: '#f1f5f9' }}>
             Quản lý Scenario Steps
           </h1>
           <p className="mt-2 text-sm text-slate-300">

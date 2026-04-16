@@ -97,7 +97,7 @@ export default function AdminOverview() {
     <AdminLayout>
       <div className="max-w-6xl">
         <div className="mb-6">
-          <h1 className="text-2xl font-extrabold tracking-tight">Tổng quan</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight" style={{ color: '#f1f5f9' }}>Tổng quan</h1>
           <p className="mt-2 text-sm text-slate-300">
             Thống kê tổng hợp từ các endpoint admin (client-side aggregate).
           </p>
