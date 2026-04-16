@@ -39,9 +39,13 @@ export default function GmailWindow({
   onFileDownload,
   onLinkClick,
   onVerifyMail,
+  showVerifyAction,
   mailOtpMode,
   isShaking,
 }) {
+  const isPlainMail = scenarioType === 'MAIL_STANDARD' || scenarioType === 'MAIL'
+  const showVerify = Boolean(showVerifyAction ?? isPlainMail)
+
   return (
     <section className="flex h-full min-h-0 flex-col bg-[#f6f8fc] text-slate-800">
       <div className="flex shrink-0 items-center gap-2 border-b border-slate-200/90 bg-white px-2 py-2 sm:px-4">
@@ -137,7 +141,7 @@ export default function GmailWindow({
               <button type="button" className="rounded p-1.5 hover:bg-slate-100">
                 <Trash2 className="h-4 w-4" />
               </button>
-              {scenarioType !== 'MAIL_FILE' && scenarioType !== 'MAIL_WEB' ? (
+              {showVerify ? (
                 <button
                   type="button"
                   onClick={onVerifyMail}
@@ -176,7 +180,7 @@ export default function GmailWindow({
                     >
                       {currentEmail?.senderName}
                     </button>
-                    <span className="text-sm text-[#5f6368]">&lt;{currentEmail?.senderEmail}&gt;</span>
+                    <span className="text-sm text-[#5f6368]"></span>
                     <InspectionTooltip
                       open={senderTooltipOpen}
                       value={currentEmail?.senderEmail}
@@ -191,20 +195,20 @@ export default function GmailWindow({
                 {currentEmail?.body}
               </pre>
 
-              {currentEmail?.linkUrl && currentEmail.linkUrl !== '#' ? (
+              {currentEmail?.linkUrl || scenarioType === 'MAIL_WEB' || scenarioType === 'MAIL_OTP' ? (
                 <div className="mt-6">
                   <a
-                    href={currentEmail.linkUrl}
+                    href={currentEmail?.linkUrl || '#'}
                     onClick={(e) => {
                       e.preventDefault()
-                      onLinkClick(currentEmail.linkUrl)
+                      onLinkClick(currentEmail?.linkUrl || '#')
                     }}
-                    onMouseEnter={() => onHoverUrl(currentEmail.linkUrl)}
+                    onMouseEnter={() => onHoverUrl(currentEmail?.linkUrl || '#')}
                     onMouseLeave={() => onHoverUrl('')}
                     className="inline-flex items-center gap-2 rounded-md bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100"
                   >
                     <Link2 className="h-4 w-4" />
-                    {currentEmail.linkLabel || currentEmail.linkUrl}
+                    {currentEmail?.linkLabel || currentEmail?.linkUrl || 'Truy cập ngay'}
                   </a>
                 </div>
               ) : null}
@@ -216,7 +220,7 @@ export default function GmailWindow({
                     onClick={() => onFileDownload(attachmentSpec.fileName)}
                     onMouseEnter={() => onHoverUrl(`Tải xuống tệp: ${attachmentSpec.fileName}`)}
                     onMouseLeave={() => onHoverUrl('')}
-                    className="group relative flex w-64 cursor-pointer flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition-all hover:shadow-md"
+                    className="no-drag group relative flex w-64 cursor-pointer flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition-all hover:shadow-md"
                   >
                     <div
                       className={[

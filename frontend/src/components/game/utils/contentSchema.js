@@ -1,4 +1,4 @@
-const TYPE_SET = new Set(['MAIL_STANDARD', 'MAIL_WEB', 'MAIL_OTP', 'MAIL_ZALO'])
+const TYPE_SET = new Set(['MAIL_STANDARD', 'MAIL_FILE', 'MAIL_WEB', 'MAIL_OTP', 'MAIL_ZALO', 'MIXED_INBOX'])
 
 function parseJson(value) {
   if (!value || typeof value !== 'string') return {}
@@ -16,6 +16,7 @@ function mapStepTypeToScenarioType(stepType) {
   if (normalized === 'WEB_PAGE') return 'MAIL_WEB'
   if (normalized === 'OTP' || normalized === 'MAIL_OTP') return 'MAIL_OTP'
   if (normalized === 'ZALO') return 'MAIL_ZALO'
+  if (normalized === 'MIXED_INBOX') return 'MIXED_INBOX'
   return 'MAIL_STANDARD'
 }
 
@@ -80,11 +81,17 @@ export function normalizeScenarioContent({ stepType, content, queue }) {
       displayUrl: raw?.traps?.browser?.addressBar?.displayUrl || raw?.landing?.fakeUrl || '',
       actualUrl: raw?.traps?.browser?.addressBar?.actualUrl || raw?.landing?.fakeUrl || '',
       formType: raw?.traps?.browser?.formType || (scenarioType === 'MAIL_OTP' ? 'OTP' : 'CREDENTIAL'),
+      webType: raw?.traps?.browser?.webType || raw?.webType || 'MICROSOFT',
+      emailTraps: Array.isArray(raw?.traps?.browser?.emailTraps) ? raw.traps.browser.emailTraps : [],
     },
     zalo: {
       enabled: Boolean(raw?.traps?.zalo?.enabled ?? zaloEnabled),
       peerName: raw?.traps?.zalo?.peerName || raw?.sender || 'Liên hệ',
-      messages: Array.isArray(raw?.traps?.zalo?.messages) ? raw.traps.zalo.messages : [],
+      messages: Array.isArray(raw?.traps?.zalo?.messages)
+        ? raw.traps.zalo.messages
+        : Array.isArray(raw?.messages)
+          ? raw.messages
+          : [],
     },
     otp: {
       enabled: Boolean(raw?.traps?.otp?.enabled ?? otpEnabled),
@@ -100,6 +107,8 @@ export function normalizeScenarioContent({ stepType, content, queue }) {
       links: contentLinks,
       attachments: contentAttachments.map((x, i) => normalizeAttachment(x, `content-attachment-${i}`)),
     },
+    policyRules: Array.isArray(raw?.policyRules) ? raw.policyRules : [],
+    policySections: Array.isArray(raw?.policySections) ? raw.policySections : [],
     traps,
     rules: {
       quarantineWins: true,

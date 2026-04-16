@@ -11,4 +11,8 @@ import java.util.UUID;
 public interface ScenarioStepRepository extends JpaRepository<ScenarioStep, UUID> {
     List<ScenarioStep> findByScenarioIdOrderByStepOrderAsc(UUID scenarioId);
     int countByScenarioId(UUID scenarioId);
+
+    boolean existsByScenarioIdAndStepOrder(UUID scenarioId, Integer stepOrder);
+
+    boolean existsByScenarioIdAndStepOrderAndIdNot(UUID scenarioId, Integer stepOrder, UUID id);
 }

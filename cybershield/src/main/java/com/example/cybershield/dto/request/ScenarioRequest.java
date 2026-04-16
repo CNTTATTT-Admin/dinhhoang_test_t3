@@ -16,6 +16,8 @@ public record ScenarioRequest(
 
         String description,
 
-        Integer rewardExp
+        Integer rewardExp,
+
+        Integer tutorialMode
 ) {
 }

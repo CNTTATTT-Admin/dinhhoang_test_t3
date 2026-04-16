@@ -26,6 +26,9 @@ public class Scenario {
 
     private Integer rewardExp;
 
+    /** 1 = chiến dịch tutorial (hiện trên Campaigns); 0 = không (vd. MIXED_INBOX “trận thật”). */
+    private Integer tutorialMode;
+
     @OneToMany(mappedBy = "scenario", cascade = CascadeType.ALL)
     @OrderBy("stepOrder ASC")
     private List<ScenarioStep> steps;

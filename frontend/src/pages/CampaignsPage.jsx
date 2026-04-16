@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   AlertTriangle,
@@ -10,7 +10,8 @@ import {
 } from 'lucide-react'
 import PageShell from '../components/layout/PageShell.jsx'
 import * as scenarioService from '../services/scenarioService.js'
-import { TOKEN_KEY } from '../utils/axiosClient.js'
+import * as authService from '../services/authService.js'
+import { TOKEN_KEY, clearAuthStorage, resolveStoredToken } from '../utils/axiosClient.js'
 
 function difficultyBadge(level) {
   if ((level || '').toLowerCase() === 'easy') {
@@ -55,6 +56,12 @@ function isUuid(value) {
   )
 }
 
+function isTutorialScenario(item) {
+  const v = item?.tutorialMode ?? item?.tutorial_mode
+  // Backend uses tutorialMode: 0/1 (sometimes string). Default to 0 when missing.
+  return v === 0 || v === '0' || v == null
+}
+
 export default function CampaignsPage() {
   const navigate = useNavigate()
   const [isLoading, setIsLoading] = useState(true)
@@ -92,11 +99,28 @@ export default function CampaignsPage() {
   }, [])
 
   const hasToken = !!sessionStorage.getItem(TOKEN_KEY)
+  const handleLogout = useCallback(async () => {
+    try {
+      if (resolveStoredToken()) {
+        await authService.logout()
+      }
+    } catch {
+      // Server logout can fail on expired token; still clear client auth state.
+    } finally {
+      clearAuthStorage()
+      navigate('/login', { replace: true })
+    }
+  }, [navigate])
+
+  const tutorialScenarios = useMemo(
+    () => (Array.isArray(scenarios) ? scenarios : []).filter(isTutorialScenario),
+    [scenarios],
+  )
 
   const filteredScenarios = useMemo(() => {
     const q = query.trim().toLowerCase()
     const df = difficultyFilter
-    return (Array.isArray(scenarios) ? scenarios : []).filter((s) => {
+    return tutorialScenarios.filter((s) => {
       const hay = [
         s?.title,
         s?.category,
@@ -119,12 +143,12 @@ export default function CampaignsPage() {
 
       return matchesQuery && matchesDifficulty
     })
-  }, [difficultyFilter, query, scenarios])
+  }, [difficultyFilter, query, tutorialScenarios])
 
-  const totalCount = scenarios.length
+  const totalCount = tutorialScenarios.length
   const completedCount = useMemo(
-    () => scenarios.filter((s) => isScenarioCompleted(s)).length,
-    [scenarios],
+    () => tutorialScenarios.filter((s) => isScenarioCompleted(s)).length,
+    [tutorialScenarios],
   )
   const overallPct = useMemo(() => {
     if (!totalCount) return 0
@@ -132,7 +156,10 @@ export default function CampaignsPage() {
   }, [completedCount, totalCount])
 
   return (
-    <PageShell headerVariant={hasToken ? 'user' : 'guest'}>
+    <PageShell
+      headerVariant={hasToken ? 'user' : 'guest'}
+      onLogout={hasToken ? handleLogout : undefined}
+    >
       <main className="flex-grow bg-[#0B1120]">
         <div className="max-w-7xl mx-auto px-6 md:px-12 py-6 flex flex-col flex-grow bg-[#0B1120]">
           <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900/40 p-4 backdrop-blur-md shadow-[0_0_55px_rgba(0,0,0,0.35)] sm:p-5">
@@ -245,6 +272,12 @@ export default function CampaignsPage() {
             </div>
           ) : null}
 
+          {!isLoading && scenarios.length > 0 && tutorialScenarios.length === 0 ? (
+            <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-6 text-sm text-slate-300">
+              Không có chiến dịch (tutorialMode = 0) nào khả dụng.
+            </div>
+          ) : null}
+
           {!isLoading ? (
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
               {filteredScenarios.map((item) => {
@@ -341,7 +374,9 @@ export default function CampaignsPage() {
             </div>
           ) : null}
 
-          {!isLoading && scenarios.length > 0 && filteredScenarios.length === 0 ? (
+          {!isLoading &&
+          tutorialScenarios.length > 0 &&
+          filteredScenarios.length === 0 ? (
             <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-6 text-sm text-slate-300">
               Không tìm thấy chiến dịch phù hợp với bộ lọc/từ khóa hiện tại.
             </div>

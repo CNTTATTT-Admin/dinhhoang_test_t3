@@ -9,6 +9,7 @@ import java.util.List;
  * Payload tạo/cập nhật email inbox ảo (admin hoặc seed).
  */
 public record VirtualInboxEmailRequest(
+        String emailType,
         @NotBlank String senderEmail,
         String senderName,
         @NotBlank String subject,

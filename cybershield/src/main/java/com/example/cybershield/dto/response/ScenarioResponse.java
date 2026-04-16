@@ -12,6 +12,7 @@ public record ScenarioResponse(
         String thumbnailUrl,
         String description,
         int rewardExp,
+        int tutorialMode,
         boolean isLocked,
         boolean isCompleted
 ) {
@@ -32,6 +33,7 @@ public record ScenarioResponse(
                 entity.getThumbnailUrl(),
                 entity.getDescription(),
                 entity.getRewardExp() == null ? 300 : entity.getRewardExp(),
+                entity.getTutorialMode() == null ? 0 : entity.getTutorialMode(),
                 isLocked,
                 isCompleted
         );

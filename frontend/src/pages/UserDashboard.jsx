@@ -9,6 +9,7 @@ import UserStats from '../components/dashboard/UserStats.jsx'
 import { TOKEN_KEY } from '../utils/axiosClient.js'
 import * as badgeService from '../services/badgeService.js'
 import * as scenarioService from '../services/scenarioService.js'
+import * as sessionService from '../services/sessionService.js'
 import * as userService from '../services/userService.js'
 import {
   getCurrentBadgeForExp,
@@ -206,9 +207,10 @@ function ModeCard({
 }
 
 function GameModesPanel({ onStartEndless, isDisabled, completedCampaigns, totalCampaigns }) {
-  const readyToUnlockModes = totalCampaigns > 0 && completedCampaigns >= totalCampaigns
-  const lockLabel = `Cần hoàn thành ${totalCampaigns}/${totalCampaigns} chiến dịch (hiện tại ${completedCampaigns}/${totalCampaigns})`
-  const shouldLockModes = isDisabled || !readyToUnlockModes
+  const readyToUnlockPvp = totalCampaigns > 0 && completedCampaigns >= totalCampaigns
+  const lockLabel = `Cần hoàn thành ${totalCampaigns - 1}/${totalCampaigns - 1} chiến dịch (hiện tại ${completedCampaigns}/${totalCampaigns - 1})`
+  const lockEndless = isDisabled
+  const lockPvp = isDisabled || !readyToUnlockPvp
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -219,8 +221,8 @@ function GameModesPanel({ onStartEndless, isDisabled, completedCampaigns, totalC
         description="Thử thách giới hạn phản xạ. Emails sẽ gửi đến liên tục với tốc độ tăng dần. Đừng để bị lừa!"
         buttonLabel="Vào Sinh Tồn"
         onClick={onStartEndless}
-        disabled={shouldLockModes}
-        badge={shouldLockModes ? lockLabel : 'Đã mở khóa'}
+        disabled={lockEndless}
+        badge={lockEndless ? 'Đang tải…' : 'Đã mở khóa'}
         icon={
           <svg
             width="24"
@@ -263,8 +265,8 @@ function GameModesPanel({ onStartEndless, isDisabled, completedCampaigns, totalC
         description="So tài cùng người chơi khác. Ai nhận diện Phishing nhanh và chính xác hơn sẽ giành chiến thắng."
         buttonLabel="Tìm Đối Thủ"
         onClick={() => {}}
-        disabled={shouldLockModes}
-        badge={shouldLockModes ? lockLabel : 'Đã mở khóa'}
+        disabled={lockPvp}
+        badge={lockPvp ? lockLabel : 'Đã mở khóa'}
         icon={
           <svg
             width="24"
@@ -461,9 +463,37 @@ export default function UserDashboard({ onLogout }) {
     return { currentBadge, nextBadge, rankProgress, totalExp }
   }, [sortedBadges, userProfile?.totalExp])
 
-  const handleStartEndless = useCallback(() => {
-    navigate('/train/survival-inbox')
-  }, [navigate])
+  const handleStartEndless = useCallback(async () => {
+    try {
+      const { data: scenarios } = await scenarioService.getScenarios({ forceRefresh: true })
+      const list = Array.isArray(scenarios) ? scenarios : []
+      const solo = list.find(
+        (s) =>
+          String(s?.category || '').toUpperCase() === 'SOLO_MIXED' ||
+          String(s?.title || '').includes('Chế độ Chơi đơn'),
+      )
+      if (!solo?.id) {
+        notify('error', 'Chưa tìm thấy chế độ chơi đơn trên hệ thống.')
+        return
+      }
+      const { data: sessions } = await sessionService.fetchSessionsByScenario(solo.id, { forceRefresh: true })
+      const sessList = Array.isArray(sessions) ? sessions : []
+      const first = sessList[0]
+      if (!first?.sessionId) {
+        notify('error', 'Không có bước màn chơi cho chế độ đơn.')
+        return
+      }
+      navigate(`/play/${first.sessionId}`, {
+        state: {
+          scenarioId: solo.id,
+          campaignTitle: solo.title,
+          lesson: first,
+        },
+      })
+    } catch (err) {
+      notify('error', getErrorMessage(err))
+    }
+  }, [navigate, notify])
 
   return (
     <div className="min-h-screen bg-[#0B1120] text-slate-200 flex flex-col">

@@ -1,5 +1,5 @@
+import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, MoreHorizontal, Phone, Search, Send } from 'lucide-react'
-import { QuarantineStamp } from './playModeShared.jsx'
 
 /**
  * Parse JSON kịch bản — không bao giờ dump raw JSON ra bubble.
@@ -65,14 +65,36 @@ function parseZaloContent(content) {
 
 export default function FakeZaloPanel({
   content,
-  replyText,
-  onReplyChange,
-  onReport,
   onTrustSend,
-  canReport,
   canTrustSend,
+  fixedReplyText = 'VERIFY',
+  verifyRequired = true,
 }) {
   const parsed = parseZaloContent(content)
+  const [sentMessages, setSentMessages] = useState([])
+  useEffect(() => {
+    setSentMessages([])
+  }, [content])
+  const allMessages = useMemo(
+    () => [...parsed.messages, ...sentMessages],
+    [parsed.messages, sentMessages],
+  )
+
+  const handleSend = () => {
+    const text = String(fixedReplyText || 'VERIFY').trim()
+    if (!canTrustSend || !verifyRequired || !text) return
+    const now = new Date()
+    const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+    const next = {
+      id: `me-${now.getTime()}`,
+      from: 'me',
+      sender: 'me',
+      text,
+      time,
+    }
+    setSentMessages((prev) => [...prev, next])
+    window.setTimeout(() => onTrustSend(text), 220)
+  }
 
   return (
     <section className="flex h-full min-h-0 flex-col bg-[#e8eef5] text-slate-900">
@@ -110,16 +132,29 @@ export default function FakeZaloPanel({
       <div className="min-h-0 flex-1 overflow-y-auto bg-[#dbe7f5] px-3 py-4">
         <p className="mb-4 text-center text-[11px] text-slate-500">Mô phỏng đào tạo — không kết nối Zalo thật</p>
         <div className="space-y-3">
-          {parsed.messages.map((m, idx) => (
-            <div key={m.id} className="flex justify-start">
+          {allMessages.map((m, idx) => (
+            <div key={m.id} className={`flex ${m.from === 'me' ? 'justify-end' : 'justify-start'}`}>
               <div className="max-w-[88%]">
-                <div className="rounded-2xl rounded-tl-md bg-white px-3.5 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.06)]">
-                  <p className="text-[13px] font-semibold text-[#0068ff]">{m.sender}</p>
-                  <p className="mt-1 whitespace-pre-wrap text-[14px] leading-relaxed text-slate-800">
+                <div
+                  className={[
+                    'rounded-2xl px-3.5 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.06)]',
+                    m.from === 'me'
+                      ? 'rounded-tr-md bg-[#0068ff] text-white'
+                      : 'rounded-tl-md bg-white text-slate-900',
+                  ].join(' ')}
+                >
+                  <p className={`text-[13px] font-semibold ${m.from === 'me' ? 'text-white/90' : 'text-[#0068ff]'}`}>
+                    {m.sender}
+                  </p>
+                  <p
+                    className={`mt-1 whitespace-pre-wrap text-[14px] leading-relaxed ${
+                      m.from === 'me' ? 'text-white' : 'text-slate-800'
+                    }`}
+                  >
                     {m.text}
                   </p>
                 </div>
-                <p className="mt-1 pl-1 text-[10px] text-slate-500">
+                <p className={`mt-1 text-[10px] text-slate-500 ${m.from === 'me' ? 'pr-1 text-right' : 'pl-1'}`}>
                   {m.time || `${9 + idx}:${String((idx * 7) % 60).padStart(2, '0')}`}
                 </p>
               </div>
@@ -128,27 +163,23 @@ export default function FakeZaloPanel({
         </div>
       </div>
 
-      {/* Hành động: chỉ báo cáo + nhập tin rồi gửi = tin tưởng */}
+      {/* Hành động: chỉ nhập tin + gửi (verify). */}
       <footer className="shrink-0 border-t border-[#c5d0e0] bg-white px-2.5 py-2 pb-[env(safe-area-inset-bottom)]">
-        <div className="mb-2">
-          <QuarantineStamp disabled={!canReport} onClick={onReport} />
-        </div>
         <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
-          Tin tưởng &amp; trả lời (mô phỏng) — nhập nội dung rồi gửi
+          {verifyRequired
+            ? 'Xác nhận qua Zalo (verify) — bấm gửi để xác nhận'
+            : 'Câu này không yêu cầu gửi tin nhắn Zalo'}
         </p>
         <div className="flex items-end gap-1.5 rounded-2xl border border-slate-200 bg-[#f4f7fb] px-2 py-1.5">
-          <textarea
-            rows={2}
-            value={replyText}
-            onChange={(e) => onReplyChange(e.target.value)}
-            placeholder="Nhập tin nhắn…"
-            className="min-h-[44px] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none disabled:opacity-50"
-            disabled={!canReport}
-          />
+          <div className="min-h-[44px] flex-1 px-2 py-2 text-sm text-slate-700">
+            {verifyRequired
+              ? `Nội dung xác nhận: ${String(fixedReplyText || '').trim()}`
+              : 'Không cần gửi Zalo.'}
+          </div>
           <button
             type="button"
-            disabled={!canTrustSend}
-            onClick={onTrustSend}
+            disabled={!canTrustSend || !verifyRequired || !String(fixedReplyText || '').trim()}
+            onClick={handleSend}
             className="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#0068ff] text-white shadow-md transition hover:bg-[#0058d4] disabled:cursor-not-allowed disabled:bg-slate-300"
             aria-label="Gửi (tin tưởng)"
           >
