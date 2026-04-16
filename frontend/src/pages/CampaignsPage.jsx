@@ -56,6 +56,11 @@ function isUuid(value) {
   )
 }
 
+function isTutorialScenario(item) {
+  const v = item?.tutorialMode ?? item?.tutorial_mode
+  return v === 1 || v === '1'
+}
+
 export default function CampaignsPage() {
   const navigate = useNavigate()
   const [isLoading, setIsLoading] = useState(true)
@@ -106,10 +111,15 @@ export default function CampaignsPage() {
     }
   }, [navigate])
 
+  const tutorialScenarios = useMemo(
+    () => (Array.isArray(scenarios) ? scenarios : []).filter(isTutorialScenario),
+    [scenarios],
+  )
+
   const filteredScenarios = useMemo(() => {
     const q = query.trim().toLowerCase()
     const df = difficultyFilter
-    return (Array.isArray(scenarios) ? scenarios : []).filter((s) => {
+    return tutorialScenarios.filter((s) => {
       const hay = [
         s?.title,
         s?.category,
@@ -132,12 +142,12 @@ export default function CampaignsPage() {
 
       return matchesQuery && matchesDifficulty
     })
-  }, [difficultyFilter, query, scenarios])
+  }, [difficultyFilter, query, tutorialScenarios])
 
-  const totalCount = scenarios.length
+  const totalCount = tutorialScenarios.length
   const completedCount = useMemo(
-    () => scenarios.filter((s) => isScenarioCompleted(s)).length,
-    [scenarios],
+    () => tutorialScenarios.filter((s) => isScenarioCompleted(s)).length,
+    [tutorialScenarios],
   )
   const overallPct = useMemo(() => {
     if (!totalCount) return 0
@@ -261,6 +271,12 @@ export default function CampaignsPage() {
             </div>
           ) : null}
 
+          {!isLoading && scenarios.length > 0 && tutorialScenarios.length === 0 ? (
+            <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-6 text-sm text-slate-300">
+              Không có chiến dịch tutorial (tutorialMode = 1) nào khả dụng.
+            </div>
+          ) : null}
+
           {!isLoading ? (
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
               {filteredScenarios.map((item) => {
@@ -357,7 +373,9 @@ export default function CampaignsPage() {
             </div>
           ) : null}
 
-          {!isLoading && scenarios.length > 0 && filteredScenarios.length === 0 ? (
+          {!isLoading &&
+          tutorialScenarios.length > 0 &&
+          filteredScenarios.length === 0 ? (
             <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-6 text-sm text-slate-300">
               Không tìm thấy chiến dịch phù hợp với bộ lọc/từ khóa hiện tại.
             </div>

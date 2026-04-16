@@ -27,6 +27,7 @@ public class TrainingSession {
 
     private int scoreGained;
     private String status; // COMPLETED, FAILED, LEAKED
+    /** true khi Scenario.tutorialMode == 1 (màn hỗn hợp / không tutorial thì false). */
     private boolean tutorialMode;
 }
 

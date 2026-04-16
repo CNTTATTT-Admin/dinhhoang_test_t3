@@ -12,13 +12,18 @@ import com.example.cybershield.repository.ScenarioRepository;
 import com.example.cybershield.repository.ScenarioStepRepository;
 import com.example.cybershield.repository.UserRepository;
 import com.example.cybershield.repository.VirtualInboxEmailRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ThreadLocalRandom;
 
 @Component
@@ -32,6 +37,7 @@ public class DataInitializer implements CommandLineRunner {
     private final VirtualInboxEmailRepository virtualInboxEmailRepository;
     private final BadgeRepository badgeRepository;
     private final PasswordEncoder passwordEncoder;
+    private final ObjectMapper objectMapper;
 
     @Override
     public void run(String... args) {
@@ -106,15 +112,17 @@ public class DataInitializer implements CommandLineRunner {
         if (scenarioRepository.count() > 0) return scenarioRepository.findAll();
 
         List<Scenario> scenarios = new ArrayList<>();
-        scenarios.add(createScenario("Chiến dịch 1: Nhập môn Phishing", "MAIL_STANDARD", "Easy", "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1200&q=80", "Chiến dịch nhập môn giúp nhận diện phishing qua người gửi, nội dung và dấu hiệu thao túng tâm lý.", 500));
-        scenarios.add(createScenario("Chiến dịch 2: Hiểm họa đính kèm", "MAIL_FILE", "Medium", "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80", "Mô phỏng các rủi ro tệp đính kèm trong email công sở với mức độ giả lập cao.", 700));
-        scenarios.add(createScenario("Chiến dịch 3: Website giả mạo", "MAIL_WEB", "Hard", "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1200&q=80", "Mô phỏng bộ trap website giả mạo để rèn kỹ năng soi URL và đối chiếu ngữ cảnh dịch vụ.", 1000));
-        scenarios.add(createScenario("Chiến dịch 4: Chiếm đoạt OTP", "MAIL_OTP", "Hard", "https://images.unsplash.com/photo-1563013544-824ae1b704d3?auto=format&fit=crop&w=1200&q=80", "Mô phỏng các kịch bản social engineering nhằm đánh cắp mã OTP qua email và trang xác minh giả.", 1200));
-        scenarios.add(createScenario("Chiến dịch 5: Đặc vụ điều tra số", "MAIL_ZALO", "Hard", "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=80", "Đối chiếu mâu thuẫn giữa Email, Zalo và quy trình SOP nội bộ để ra quyết định chính xác.", 1500));
+        scenarios.add(createScenario("Chiến dịch 1: Nhập môn Phishing", "MAIL_STANDARD", "Easy", "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1200&q=80", "Chiến dịch nhập môn giúp nhận diện phishing qua người gửi, nội dung và dấu hiệu thao túng tâm lý.", 500, 1));
+        scenarios.add(createScenario("Chiến dịch 2: Hiểm họa đính kèm", "MAIL_FILE", "Medium", "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80", "Mô phỏng các rủi ro tệp đính kèm trong email công sở với mức độ giả lập cao.", 700, 1));
+        scenarios.add(createScenario("Chiến dịch 3: Website giả mạo", "MAIL_WEB", "Hard", "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1200&q=80", "Mô phỏng bộ trap website giả mạo để rèn kỹ năng soi URL và đối chiếu ngữ cảnh dịch vụ.", 1000, 1));
+        scenarios.add(createScenario("Chiến dịch 4: Chiếm đoạt OTP", "MAIL_OTP", "Hard", "https://images.unsplash.com/photo-1563013544-824ae1b704d3?auto=format&fit=crop&w=1200&q=80", "Mô phỏng các kịch bản social engineering nhằm đánh cắp mã OTP qua email và trang xác minh giả.", 1200, 1));
+        scenarios.add(createScenario("Chiến dịch 5: Đặc vụ điều tra số", "MAIL_ZALO", "Hard", "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=80", "Đối chiếu mâu thuẫn giữa Email, Zalo và quy trình SOP nội bộ để ra quyết định chính xác.", 1500, 1));
+        scenarios.add(createScenario("Chiến dịch 6: Hỗn hợp đa bẫy", "MIXED_INBOX", "Hard", "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=1200&q=80", "Một phiên inbox chứa nhiều kiểu câu hỏi trộn lẫn: mail thường, file đính kèm, web trap, OTP và xác minh Zalo.", 1800, 0));
+        scenarios.add(createScenario("Chế độ Chơi đơn: Thử thách Hỗn hợp", "SOLO_MIXED", "Hard", "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=1200&q=80", "Năm mươi tình huống thám tử hòm thư: trộn mail, file, web, OTP và Zalo — điểm phiên cộng trừ EXP mỗi lần chơi.", 5000, 0));
         return scenarioRepository.saveAll(scenarios);
     }
 
-    private Scenario createScenario(String title, String category, String difficulty, String thumbnail, String description, int rewardExp) {
+    private Scenario createScenario(String title, String category, String difficulty, String thumbnail, String description, int rewardExp, int tutorialMode) {
         Scenario scenario = new Scenario();
         scenario.setTitle(title);
         scenario.setCategory(category);
@@ -122,6 +130,7 @@ public class DataInitializer implements CommandLineRunner {
         scenario.setThumbnailUrl(thumbnail);
         scenario.setDescription(description);
         scenario.setRewardExp(rewardExp);
+        scenario.setTutorialMode(tutorialMode);
         return scenario;
     }
 
@@ -239,6 +248,23 @@ public class DataInitializer implements CommandLineRunner {
                 "INPUT", "REPORT",
                 "Dữ liệu tài chính và nhân sự luôn phải đối chiếu chéo trước khi thao tác."
         );
+
+        if (scenarios.size() >= 6) {
+            upsertStep(
+                    scenarios.get(5), 1, "MIXED_INBOX",
+                    buildMixedInboxContent("Bài tập 1: Inbox hỗn hợp đa bẫy", 5),
+                    "INPUT", "REPORT",
+                    "Giữ thói quen kiểm tra từng email theo ngữ cảnh thay vì áp dụng một luật duy nhất cho cả màn."
+            );
+        }
+        if (scenarios.size() >= 7) {
+            upsertStep(
+                    scenarios.get(6), 1, "MIXED_INBOX",
+                    buildSoloMixedStepContent(),
+                    "INPUT", "REPORT",
+                    "Đọc kỹ policy, đối chiếu từng kênh; điểm phiên được cộng trừ vào EXP tài khoản."
+            );
+        }
     }
 
     private String buildFlow5Content(String title, int threatLevel, String caseMapJson) {
@@ -312,6 +338,159 @@ public class DataInitializer implements CommandLineRunner {
                 + "}";
     }
 
+    private String buildMixedInboxContent(String title, int threatLevel) {
+        String rulesJson = "["
+                + "\"Không đọc OTP cho bất kỳ ai, kể cả người tự xưng IT hoặc cấp trên.\","
+                + "\"File đính kèm dạng .exe/.scr/.js phải được xem là nguy cơ cao.\","
+                + "\"Link đăng nhập phải đối chiếu domain thật ở cuối URL.\","
+                + "\"Yêu cầu tài chính khẩn qua chat phải xác minh chéo theo SOP.\","
+                + "\"Dùng kênh Zalo chỉ để xác nhận quy trình, không thay thế phê duyệt chính thức.\""
+                + "]";
+        String sectionsJson = "["
+                + "{"
+                + "\"employee\":\"IT Helpdesk\","
+                + "\"email\":\"it.helpdesk@cybershield.biz\","
+                + "\"rules\":["
+                + "\"Không bao giờ yêu cầu OTP qua email hoặc chat.\","
+                + "\"Không phát hành bản vá dưới dạng file .exe gửi qua email.\""
+                + "]"
+                + "},"
+                + "{"
+                + "\"employee\":\"Sếp Quang\","
+                + "\"email\":\"sep.quang@cybershield.biz\","
+                + "\"rules\":["
+                + "\"Yêu cầu tài chính cần văn bản phê duyệt, không xử lý qua tin nhắn khẩn.\","
+                + "\"Xác nhận trên Zalo chỉ là bước bổ sung, không thay thế SOP.\""
+                + "]"
+                + "}"
+                + "]";
+        String caseMapJson = "["
+                + "{\"sortOrder\":5,\"zaloVerifyRequired\":true,\"zaloAutoReply\":\"Dạ em đã đối chiếu SOP và xác nhận đúng quy trình.\",\"sender\":\"Sếp Quang\",\"messages\":[{\"sender\":\"Sếp Quang\",\"text\":\"Anh gửi tài liệu qua email rồi, em xác nhận giúp anh theo quy trình nhé.\"}]}"
+                + "]";
+        String zaloMessagesJson = "["
+                + "{\"sender\":\"Điều phối nội bộ\",\"text\":\"Màn mixed: luôn đối chiếu email với SOP trước khi tin tưởng.\"}"
+                + "]";
+        return "{"
+                + "\"scenarioType\":\"MIXED_INBOX\","
+                + "\"title\":\"" + escapeJson(title) + "\","
+                + "\"threatLevel\":" + threatLevel + ","
+                + "\"sender\":\"Điều phối nội bộ\","
+                + "\"messages\":" + zaloMessagesJson + ","
+                + "\"zaloVerifyRequired\":false,"
+                + "\"zaloAutoReply\":\"Dạ em đã kiểm tra theo đúng quy trình.\","
+                + "\"caseMap\":" + caseMapJson + ","
+                + "\"policyRules\":" + rulesJson + ","
+                + "\"policySections\":" + sectionsJson
+                + "}";
+    }
+
+    /** JSON bước MIXED_INBOX chơi đơn: 50 mail seed + policy 5 nhân sự + caseMap theo caseId (SOLO_MIX_41–50). */
+    private String buildSoloMixedStepContent() {
+        String policyRules = "["
+                + "\"Không đọc OTP cho bất kỳ ai qua email, chat hay cổng lạ.\","
+                + "\"File .exe/.scr/.js từ nguồn ngoài tổ chức coi là nguy cơ cao.\","
+                + "\"Đối chiếu domain thật ở cuối URL; cảnh giác lỗi chính tả tên miền.\","
+                + "\"Chỉ đạo tài chính phải có văn bản phê duyệt; không chuyển tiền theo tin nhắn khẩn.\","
+                + "\"Zalo chỉ bổ sung xác nhận quy trình, không thay thế phê duyệt chính thức.\","
+                + "\"Dữ liệu khách hàng chỉ lấy từ CRM nội bộ.\""
+                + "]";
+        String policySections = "["
+                + "{\"employee\":\"Sếp Quang\",\"email\":\"sep.quang@cybershield.biz\",\"rules\":["
+                + "\"Chỉ gửi tài liệu định dạng .docx/.pdf qua email công ty.\","
+                + "\"Mọi thay đổi lịch họp phải có xác nhận Zalo theo quy trình.\","
+                + "\"Không yêu cầu chuyển tiền khẩn chỉ qua Zalo hoặc email cá nhân.\""
+                + "]},"
+                + "{\"employee\":\"IT Đức\",\"email\":\"it.support@cybershield.biz\",\"rules\":["
+                + "\"Không bao giờ yêu cầu OTP hoặc mật khẩu qua email/Zalo.\","
+                + "\"Link cập nhật phần mềm chỉ trên domain cybershield.internal hoặc portal nội bộ.\","
+                + "\"Không gửi file .exe cập nhật qua email; dùng kênh phân phối đã ban hành.\""
+                + "]},"
+                + "{\"employee\":\"HR Linh\",\"email\":\"hr.linh@cybershield.biz\",\"rules\":["
+                + "\"Thông báo tuyển dụng và nhân sự theo kênh đã đăng ký; không click link lạ để xem lương.\","
+                + "\"File danh sách nhân viên nhạy cảm phải có mật khẩu; mật khẩu là mã nhân viên.\","
+                + "\"Không mở file nhân sự không có cơ chế bảo vệ theo SOP.\""
+                + "]},"
+                + "{\"employee\":\"Kế toán Lan\",\"email\":\"ketoan.lan@cybershield.biz\",\"rules\":["
+                + "\"Ảnh hóa đơn đối chiếu qua Zalo theo quy trình đã thống nhất.\","
+                + "\"Không gửi link đăng nhập ngân hàng qua email.\","
+                + "\"Mọi thay đổi số tài khoản nhận tiền phải được xác nhận đa kênh với phòng kế toán.\""
+                + "]},"
+                + "{\"employee\":\"Sales Nam\",\"email\":\"sales.nam@cybershield.biz\",\"rules\":["
+                + "\"Hợp đồng và thông tin khách gửi qua email công ty; không thu OTP của khách qua email.\","
+                + "\"Chỉ sử dụng dữ liệu khách từ CRM nội bộ.\","
+                + "\"Không tải công cụ điều khiển từ xa từ nguồn không xác thực.\""
+                + "]}"
+                + "]";
+        String caseMap = "["
+                + "{\"caseId\":\"SOLO_MIX_41\",\"zaloVerifyRequired\":true,\"zaloAutoReply\":\"Dạ em đã đối chiếu email và xác nhận theo SOP.\",\"sender\":\"Sếp Quang\",\"messages\":[{\"sender\":\"Sếp Quang\",\"text\":\"Anh đã gửi PDF qua mail công ty, em phản hồi trên Zalo giúp anh.\"}]},"
+                + "{\"caseId\":\"SOLO_MIX_42\",\"zaloVerifyRequired\":false,\"zaloAutoReply\":\"Em báo cáo nghi ngờ mạo danh.\",\"sender\":\"Sếp Quang\",\"messages\":[{\"sender\":\"Sếp Quang (giả)\",\"text\":\"Chuyển khoản gấp, anh đang họp.\"}]},"
+                + "{\"caseId\":\"SOLO_MIX_43\",\"zaloVerifyRequired\":true,\"zaloAutoReply\":\"Dạ em đã mở portal nội bộ và xác nhận.\",\"sender\":\"IT Đức\",\"messages\":[{\"sender\":\"IT Đức\",\"text\":\"Em xác nhận đã đọc hướng dẫn VPN trên portal.\"}]},"
+                + "{\"caseId\":\"SOLO_MIX_44\",\"zaloVerifyRequired\":false,\"zaloAutoReply\":\"Em không chạy file từ email lạ.\",\"sender\":\"IT Support (giả)\",\"messages\":[{\"sender\":\"IT (giả)\",\"text\":\"Cài remote giúp anh trong 5 phút.\"}]},"
+                + "{\"caseId\":\"SOLO_MIX_45\",\"zaloVerifyRequired\":true,\"zaloAutoReply\":\"Dạ em đã đối chiếu ảnh hóa đơn trên Zalo.\",\"sender\":\"Kế toán Lan\",\"messages\":[{\"sender\":\"Kế toán Lan\",\"text\":\"Chị gửi ảnh hóa đơn rồi, em xác nhận giúp chị.\"}]},"
+                + "{\"caseId\":\"SOLO_MIX_46\",\"zaloVerifyRequired\":false,\"zaloAutoReply\":\"Em sẽ xác minh với phòng kế toán.\",\"sender\":\"Đối tác\",\"messages\":[{\"sender\":\"Lạ\",\"text\":\"Đổi STK nhận tiền trong 10 phút.\"}]},"
+                + "{\"caseId\":\"SOLO_MIX_47\",\"zaloVerifyRequired\":true,\"zaloAutoReply\":\"Dạ em đã mở file đúng mật khẩu theo SOP.\",\"sender\":\"HR Linh\",\"messages\":[{\"sender\":\"HR Linh\",\"text\":\"Mật khẩu file là mã NV, em xác nhận nhé.\"}]},"
+                + "{\"caseId\":\"SOLO_MIX_48\",\"zaloVerifyRequired\":false,\"zaloAutoReply\":\"Em không nhấn link thưởng lạ.\",\"sender\":\"HR (giả)\",\"messages\":[{\"sender\":\"HR Bonus\",\"text\":\"Nhận thưởng tại link ngoài.\"}]},"
+                + "{\"caseId\":\"SOLO_MIX_49\",\"zaloVerifyRequired\":true,\"zaloAutoReply\":\"Dạ em đã kiểm tra CRM trước khi gọi khách.\",\"sender\":\"Sales Nam\",\"messages\":[{\"sender\":\"Sales Nam\",\"text\":\"Anh đã cập nhật CRM, em đối chiếu giúp.\"}]},"
+                + "{\"caseId\":\"SOLO_MIX_50\",\"zaloVerifyRequired\":false,\"zaloAutoReply\":\"Em báo cáo an ninh, không tải biểu mẫu lạ.\",\"sender\":\"Công an (giả)\",\"messages\":[{\"sender\":\"Công an (giả)\",\"text\":\"Triệu tập khẩn, tải biểu mẫu.\"}]}"
+                + "]";
+        String zaloMessages = "[{\"sender\":\"Điều phối nội bộ\",\"text\":\"Chế độ thám tử: đối chiếu policy trước khi tin bất kỳ kênh nào.\"}]";
+        return "{"
+                + "\"scenarioType\":\"MIXED_INBOX\","
+                + "\"soloMixed\":true,"
+                + "\"title\":\"Thử thách hỗn hợp — 50 tình huống\","
+                + "\"threatLevel\":5,"
+                + "\"sender\":\"Điều phối nội bộ\","
+                + "\"messages\":" + zaloMessages + ","
+                + "\"zaloVerifyRequired\":false,"
+                + "\"zaloAutoReply\":\"Dạ em đã kiểm tra theo đúng quy trình.\","
+                + "\"caseMap\":" + caseMap + ","
+                + "\"policyRules\":" + policyRules + ","
+                + "\"policySections\":" + policySections
+                + "}";
+    }
+
+    private List<VirtualInboxEmail> buildSoloMixedInboxFromResource(ScenarioStep step) {
+        try (InputStream is = getClass().getResourceAsStream("/seed/solo_mixed_emails.json")) {
+            if (is == null) {
+                throw new IllegalStateException("Thiếu file seed/seed/solo_mixed_emails.json");
+            }
+            String raw = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            JsonNode arr = objectMapper.readTree(raw);
+            List<VirtualInboxEmail> emails = new ArrayList<>();
+            int order = 1;
+            for (JsonNode n : arr) {
+                VirtualInboxEmail email = new VirtualInboxEmail();
+                email.setScenarioStep(step);
+                email.setSortOrder(order++);
+                email.setSlotTag(n.get("slotTag").asText());
+                email.setEmailType(n.get("emailType").asText().trim().toUpperCase(Locale.ROOT));
+                email.setPhishing(n.get("phishing").asBoolean());
+                email.setSenderEmail(n.get("senderEmail").asText());
+                email.setSenderName(n.get("senderName").asText());
+                email.setSubject(n.get("subject").asText());
+                email.setBody(n.get("body").asText());
+                JsonNode linkUrl = n.get("linkUrl");
+                email.setLinkUrl(linkUrl == null || linkUrl.isNull() ? null : linkUrl.asText());
+                JsonNode linkLabel = n.get("linkLabel");
+                email.setLinkLabel(linkLabel == null || linkLabel.isNull() ? null : linkLabel.asText());
+                JsonNode att = n.get("attachmentJson");
+                email.setAttachmentJson(att == null || att.isNull() ? null : att.asText());
+                List<String> flags = new ArrayList<>();
+                JsonNode rf = n.get("redFlags");
+                if (rf != null && rf.isArray()) {
+                    for (JsonNode f : rf) {
+                        flags.add(f.asText());
+                    }
+                }
+                email.setRedFlags(flags);
+                emails.add(email);
+            }
+            return emails;
+        } catch (Exception e) {
+            throw new RuntimeException("Không đọc được seed solo mixed inbox", e);
+        }
+    }
+
     private ScenarioStep upsertStep(Scenario scenario, int order, String type, String content, String triggerFailure, String triggerSuccess, String hint) {
         ScenarioStep step = scenarioStepRepository.findByScenarioIdOrderByStepOrderAsc(scenario.getId())
                 .stream()
@@ -342,6 +521,9 @@ public class DataInitializer implements CommandLineRunner {
 
     private List<VirtualInboxEmail> buildInboxForStep(ScenarioStep step) {
         String content = step.getContent() == null ? "" : step.getContent();
+        if (content.contains("\"soloMixed\":true")) {
+            return buildSoloMixedInboxFromResource(step);
+        }
         List<VirtualInboxEmail> emails = new ArrayList<>();
         if (content.contains("\"scenarioType\":\"MAIL_STANDARD\"")) {
             if (step.getStepOrder() == 1) {
@@ -1111,6 +1293,55 @@ public class DataInitializer implements CommandLineRunner {
             return emails;
         }
 
+        if (content.contains("\"scenarioType\":\"MIXED_INBOX\"")) {
+            addVirtualInboxEmail(
+                    emails, step, 1, "LEGIT", false,
+                    "it.helpdesk@cybershield.biz", "IT Helpdesk",
+                    "Checklist bảo mật tuần này",
+                    "Nhắc nhanh: kiểm tra sender, domain và file trước khi thao tác. Đây là thư nhắc nội bộ.",
+                    null, null, null, List.of()
+            );
+            addVirtualInboxEmail(
+                    emails, step, 2, "PHISH", true,
+                    "payroll-update@salary-sync-alert.net", "Payroll Alert",
+                    "Mở file phụ cấp để xác nhận ngay",
+                    "Vui lòng mở file đính kèm để xác nhận phụ cấp trong 15 phút.",
+                    null, null,
+                    buildAttachmentJson(
+                            "PhuCap_ThangNay.exe",
+                            "Executable",
+                            "Phụ cấp tháng này",
+                            "Tệp yêu cầu cấp quyền admin để xem nội dung phụ cấp.",
+                            List.of("Tệp .exe giả dạng tài liệu lương")
+                    ),
+                    List.of("Nguồn gửi ngoài tổ chức", "Đòi mở tệp gấp")
+            );
+            addVirtualInboxEmail(
+                    emails, step, 3, "PHISH", true,
+                    "security@github-notify-center.net", "GitHub Security",
+                    "Đăng nhập xác thực repository",
+                    "Chúng tôi phát hiện truy cập lạ. Đăng nhập ngay để xác minh.",
+                    "#", "Xác minh", null,
+                    List.of("Domain giả mạo github", "Nội dung hối thúc")
+            );
+            addVirtualInboxEmail(
+                    emails, step, 4, "PHISH", true,
+                    "it.support@cybershield-helpdesk.net", "IT Support",
+                    "Nhập OTP để tránh khóa tài khoản",
+                    "Nhập OTP bạn vừa nhận vào cổng dưới đây để giữ quyền truy cập.",
+                    "https://verify-otp-security.net/portal", "Nhập OTP", null,
+                    List.of("Yêu cầu OTP qua cổng lạ")
+            );
+            addVirtualInboxEmail(
+                    emails, step, 5, "LEGIT", false,
+                    "sep.quang@cybershield.biz", "Sếp Quang",
+                    "Xác nhận đã nhận tài liệu trên Zalo",
+                    "Anh gửi tài liệu trên mail, em phản hồi xác nhận theo quy trình ở Zalo giúp anh.",
+                    null, null, null, List.of()
+            );
+            return emails;
+        }
+
         emails.add(buildInboxEmail(
                 step,
                 1,
@@ -1123,7 +1354,8 @@ public class DataInitializer implements CommandLineRunner {
                 "http://free-gifts.xyz/claim",
                 "Mo link",
                 null,
-                List.of("Domain la")
+                List.of("Domain la"),
+                null
         ));
         emails.add(buildInboxEmail(
                 step,
@@ -1137,7 +1369,8 @@ public class DataInitializer implements CommandLineRunner {
                 "https://intranet.cybershield.internal",
                 "Mo intranet",
                 null,
-                List.of()
+                List.of(),
+                null
         ));
         return emails;
     }
@@ -1169,7 +1402,8 @@ public class DataInitializer implements CommandLineRunner {
                 linkUrl,
                 ctaLabel,
                 attachmentJson,
-                redFlags
+                redFlags,
+                null
         ));
     }
 
@@ -1211,11 +1445,16 @@ public class DataInitializer implements CommandLineRunner {
         return String.valueOf(value);
     }
 
-    private VirtualInboxEmail buildInboxEmail(ScenarioStep step, int queueOrder, String mailType, boolean phishing, String fromEmail, String fromName, String subject, String body, String linkUrl, String ctaLabel, String attachmentJson, List<String> redFlags) {
+    private VirtualInboxEmail buildInboxEmail(ScenarioStep step, int queueOrder, String mailType, boolean phishing, String fromEmail, String fromName, String subject, String body, String linkUrl, String ctaLabel, String attachmentJson, List<String> redFlags, String emailTypeOverride) {
         VirtualInboxEmail email = new VirtualInboxEmail();
         email.setScenarioStep(step);
         email.setSortOrder(queueOrder);
         email.setSlotTag(mailType);
+        email.setEmailType(
+                emailTypeOverride != null && !emailTypeOverride.isBlank()
+                        ? emailTypeOverride.trim().toUpperCase(Locale.ROOT)
+                        : resolveEmailType(step, attachmentJson, linkUrl, queueOrder)
+        );
         email.setPhishing(phishing);
         email.setSenderEmail(fromEmail);
         email.setSenderName(fromName);
@@ -1226,6 +1465,30 @@ public class DataInitializer implements CommandLineRunner {
         email.setAttachmentJson(attachmentJson);
         email.setRedFlags(redFlags == null ? List.of() : redFlags);
         return email;
+    }
+
+    private String resolveEmailType(ScenarioStep step, String attachmentJson, String linkUrl, int queueOrder) {
+        String content = step.getContent() == null ? "" : step.getContent();
+        String stepType = step.getStepType() == null ? "" : step.getStepType().toUpperCase();
+        boolean legacyMixedFive =
+                (content.contains("\"scenarioType\":\"MIXED_INBOX\"") || "MIXED_INBOX".equals(stepType))
+                        && !content.contains("\"soloMixed\":true");
+        if (legacyMixedFive) {
+            return switch (queueOrder) {
+                case 2 -> "MAIL_FILE";
+                case 3 -> "MAIL_WEB";
+                case 4 -> "MAIL_OTP";
+                case 5 -> "MAIL_ZALO";
+                default -> "MAIL_STANDARD";
+            };
+        }
+        if ("MAIL_FILE".equals(stepType)) return "MAIL_FILE";
+        if ("MAIL_WEB".equals(stepType) || "WEB_PAGE".equals(stepType)) return "MAIL_WEB";
+        if ("MAIL_OTP".equals(stepType) || "OTP".equals(stepType)) return "MAIL_OTP";
+        if ("MAIL_ZALO".equals(stepType) || "ZALO".equals(stepType)) return "MAIL_ZALO";
+        if (attachmentJson != null && !attachmentJson.isBlank()) return "MAIL_FILE";
+        if (linkUrl != null && !linkUrl.isBlank() && !"#".equals(linkUrl.trim())) return "MAIL_WEB";
+        return "MAIL_STANDARD";
     }
 
     private LandingPage buildLanding(ScenarioStep step, String scenarioTitle) {

@@ -32,11 +32,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 @Service
@@ -120,10 +122,21 @@ public class GameplayService {
     public List<VirtualInboxEmailResponse> listInboxEmails(UUID stepId) {
         ScenarioStep step = scenarioStepRepository.findById(stepId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy session hợp lệ!"));
-        List<VirtualInboxEmailResponse> list = virtualInboxEmailRepository.findByScenarioStep_IdOrderBySortOrderAsc(stepId).stream()
+        String stepType = step.getStepType() == null ? "" : step.getStepType().toUpperCase(Locale.ROOT);
+        List<VirtualInboxEmail> entities = virtualInboxEmailRepository.findByScenarioStep_IdOrderBySortOrderAsc(stepId);
+        if ("MIXED_INBOX".equals(stepType)) {
+            List<VirtualInboxEmail> shuffled = new ArrayList<>(entities);
+            Collections.shuffle(shuffled, ThreadLocalRandom.current());
+            List<VirtualInboxEmailResponse> out = new ArrayList<>(shuffled.size());
+            int ord = 1;
+            for (VirtualInboxEmail e : shuffled) {
+                out.add(VirtualInboxEmailResponse.fromEntity(e, ord++));
+            }
+            return out;
+        }
+        List<VirtualInboxEmailResponse> list = entities.stream()
                 .map(VirtualInboxEmailResponse::fromEntity)
                 .toList();
-        String stepType = step.getStepType() == null ? "" : step.getStepType().toUpperCase(Locale.ROOT);
         if (!"MAIL_OTP".equals(stepType)) {
             return list;
         }
@@ -153,8 +166,8 @@ public class GameplayService {
         session.setEndedAt(LocalDateTime.now());
         session.setScoreGained(0);
         session.setStatus("IN_PROGRESS");
-        // Campaign gameplay is treated as tutorial for dashboard analytics (anti-farm metrics).
-        session.setTutorialMode(true);
+        Integer tm = scenario.getTutorialMode();
+        session.setTutorialMode(tm != null && tm == 1);
         trainingSessionRepository.save(session);
 
         List<EmailDecision> emailDecisions = request.emailDecisions() == null ? List.of() : request.emailDecisions();
@@ -169,7 +182,6 @@ public class GameplayService {
         String stepType = currentStep.getStepType() == null ? "MAIL" : currentStep.getStepType().toUpperCase(Locale.ROOT);
         boolean isMailOtp = "MAIL_OTP".equals(stepType);
         boolean isMailOnly = "MAIL".equals(stepType) || "MAIL_STANDARD".equals(stepType) || "MAIL_FILE".equals(stepType);
-        boolean isMailWeb = "WEB_PAGE".equals(stepType) || "MAIL_WEB".equals(stepType);
         boolean mailLike = isMailOnly || isMailOtp;
         boolean useEmailDecisions = !emailDecisions.isEmpty();
 
@@ -204,6 +216,7 @@ public class GameplayService {
                 String action = normalizeAction(decision.getUserAction());
                 // Luôn dùng ground truth từ DB; không tin cờ isPhishing do client gửi lên.
                 boolean actualPhishing = sourceEmail.isPhishing();
+                String emailType = normalizeEmailType(sourceEmail.getEmailType(), stepType);
                 boolean markedQuarantine = ACTION_QUARANTINE.equals(action);
                 boolean isCorrect = markedQuarantine == actualPhishing;
                 boolean enteredProvided = decision.getPayload() != null
@@ -213,8 +226,9 @@ public class GameplayService {
                 boolean isVerifiedLegit = ACTION_VERIFIED.equals(action) && !actualPhishing;
                 boolean credentialsMatch = enteredProvided
                         && decision.getExpectedPayload().trim().equals(decision.getPayload().trim());
+                boolean isMailWebDecision = "MAIL_WEB".equals(emailType);
 
-                if (isMailWeb && isVerifiedLegit) {
+                if (isMailWebDecision && isVerifiedLegit) {
                     // Flow 3: với mail hợp lệ, chỉ tính đúng khi user/pass nhập vào khớp dữ liệu chuẩn.
                     isCorrect = credentialsMatch;
                 }
@@ -235,13 +249,13 @@ public class GameplayService {
                     }
                 }
 
-                if (isMailWeb
+                if (isMailWebDecision
                         && isVerifiedLegit
                         && !credentialsMatch) {
                     falsePositive++;
                     feedbackMessages.add(buildFeedback(decision.getEmailId(),
                             "[SAI] Tài khoản hoặc mật khẩu không chính xác. Bạn đã nhập thông tin sai lệch."));
-                } else if (isMailWeb
+                } else if (isMailWebDecision
                         && isVerifiedLegit
                         && credentialsMatch) {
                     feedbackMessages.add(buildFeedback(decision.getEmailId(),
@@ -353,32 +367,18 @@ public class GameplayService {
         progress.setHighestStepReached(Math.max(progress.getHighestStepReached(), reached));
         progress.setBestScore(Math.max(progress.getBestScore(), session.getScoreGained()));
 
-        int earnedExp = 0;
-        if (passed && currentStep.getStepOrder() > previousHighestStep) {
-            int totalRewardExp = scenario.getRewardExp() == null ? 300 : Math.max(0, scenario.getRewardExp());
-            int stepCount = Math.max(1, scenarioStepCount);
-            int baseStepExp = totalRewardExp / stepCount;
-            int remainder = totalRewardExp % stepCount;
-            // Dồn phần dư vào step cuối để đảm bảo tổng EXP nhận đủ rewardExp của scenario.
-            int stepRewardExp = baseStepExp + (currentStep.getStepOrder() >= stepCount ? remainder : 0);
-            earnedExp += Math.max(0, stepRewardExp);
-        }
-
-        boolean completedCurrentSession = passed && currentStep.getStepOrder() >= scenarioStepCount;
-        if (completedCurrentSession) {
-            boolean completedBefore = progress.isScenarioCompleted();
+        if (passed && currentStep.getStepOrder() >= scenarioStepCount) {
             progress.setScenarioCompleted(true);
-            if (completedBefore) {
-                // Replay step cuối sau khi đã clear campaign trước đó không được nhận thêm EXP.
-                earnedExp = 0;
-            }
         }
 
-        if (earnedExp > 0) {
-            user.setTotalExp(user.getTotalExp() + earnedExp);
-            user.setLevel(calculateLevelFromExp(user.getTotalExp()));
-            userRepository.save(user);
-        }
+        // EXP = điểm phiên (server); mỗi lần submit đều cộng/trừ, không chặn replay. Bỏ qua finalScore client nếu lệch server.
+        int expDelta = serverAdjustedScore;
+        int newTotalExp = Math.max(0, user.getTotalExp() + expDelta);
+        user.setTotalExp(newTotalExp);
+        user.setLevel(calculateLevelFromExp(newTotalExp));
+        userRepository.save(user);
+
+        int earnedExp = expDelta;
 
         progressRepository.save(progress);
         if (feedbackMessages.isEmpty() && passed) {
@@ -405,6 +405,24 @@ public class GameplayService {
         String normalized = action.trim().toUpperCase(Locale.ROOT);
         if (normalized.equals("REPORT")) return ACTION_QUARANTINE;
         return normalized;
+    }
+
+    private String normalizeEmailType(String emailType, String fallbackStepType) {
+        String normalized = emailType == null ? "" : emailType.trim().toUpperCase(Locale.ROOT);
+        if (!normalized.isBlank()) {
+            if ("MAIL".equals(normalized)) return "MAIL_STANDARD";
+            if ("WEB_PAGE".equals(normalized)) return "MAIL_WEB";
+            if ("OTP".equals(normalized)) return "MAIL_OTP";
+            if ("ZALO".equals(normalized)) return "MAIL_ZALO";
+            return normalized;
+        }
+        String fallback = fallbackStepType == null ? "MAIL_STANDARD" : fallbackStepType.trim().toUpperCase(Locale.ROOT);
+        if ("MAIL".equals(fallback)) return "MAIL_STANDARD";
+        if ("WEB_PAGE".equals(fallback)) return "MAIL_WEB";
+        if ("OTP".equals(fallback)) return "MAIL_OTP";
+        if ("ZALO".equals(fallback)) return "MAIL_ZALO";
+        if ("MIXED_INBOX".equals(fallback)) return "MAIL_STANDARD";
+        return fallback;
     }
 
     private String buildFeedback(Long emailId, String fallback) {

@@ -80,6 +80,8 @@ public class ScenarioService {
         scenario.setThumbnailUrl(request.thumbnailUrl());
         scenario.setDescription(request.description());
         scenario.setRewardExp(request.rewardExp() == null ? 300 : Math.max(0, request.rewardExp()));
+        Integer tm = request.tutorialMode();
+        scenario.setTutorialMode(tm == null ? 0 : (tm == 1 ? 1 : 0));
     }
 
     private User resolveAuthenticatedUser(Authentication authentication) {
