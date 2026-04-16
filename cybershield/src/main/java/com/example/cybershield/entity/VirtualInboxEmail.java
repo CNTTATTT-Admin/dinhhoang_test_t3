@@ -31,6 +31,10 @@ public class VirtualInboxEmail {
     @Column(length = 32)
     private String slotTag;
 
+    /** Loại câu hỏi ở cấp từng email: MAIL_STANDARD, MAIL_FILE, MAIL_WEB, MAIL_OTP, MAIL_ZALO. */
+    @Column(length = 32)
+    private String emailType;
+
     @Column(nullable = false)
     private String senderEmail;
 

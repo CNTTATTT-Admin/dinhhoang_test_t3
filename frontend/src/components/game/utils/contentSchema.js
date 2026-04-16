@@ -1,4 +1,4 @@
-const TYPE_SET = new Set(['MAIL_STANDARD', 'MAIL_FILE', 'MAIL_WEB', 'MAIL_OTP', 'MAIL_ZALO'])
+const TYPE_SET = new Set(['MAIL_STANDARD', 'MAIL_FILE', 'MAIL_WEB', 'MAIL_OTP', 'MAIL_ZALO', 'MIXED_INBOX'])
 
 function parseJson(value) {
   if (!value || typeof value !== 'string') return {}
@@ -16,6 +16,7 @@ function mapStepTypeToScenarioType(stepType) {
   if (normalized === 'WEB_PAGE') return 'MAIL_WEB'
   if (normalized === 'OTP' || normalized === 'MAIL_OTP') return 'MAIL_OTP'
   if (normalized === 'ZALO') return 'MAIL_ZALO'
+  if (normalized === 'MIXED_INBOX') return 'MIXED_INBOX'
   return 'MAIL_STANDARD'
 }
 
