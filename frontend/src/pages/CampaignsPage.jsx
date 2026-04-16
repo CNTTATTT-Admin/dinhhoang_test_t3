@@ -58,7 +58,8 @@ function isUuid(value) {
 
 function isTutorialScenario(item) {
   const v = item?.tutorialMode ?? item?.tutorial_mode
-  return v === 1 || v === '1'
+  // Backend uses tutorialMode: 0/1 (sometimes string). Default to 0 when missing.
+  return v === 0 || v === '0' || v == null
 }
 
 export default function CampaignsPage() {
@@ -273,7 +274,7 @@ export default function CampaignsPage() {
 
           {!isLoading && scenarios.length > 0 && tutorialScenarios.length === 0 ? (
             <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-6 text-sm text-slate-300">
-              Không có chiến dịch tutorial (tutorialMode = 1) nào khả dụng.
+              Không có chiến dịch (tutorialMode = 0) nào khả dụng.
             </div>
           ) : null}
 
