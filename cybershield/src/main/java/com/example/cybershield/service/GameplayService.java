@@ -166,8 +166,11 @@ public class GameplayService {
         session.setEndedAt(LocalDateTime.now());
         session.setScoreGained(0);
         session.setStatus("IN_PROGRESS");
+        // tutorialMode=0 (hoặc null) = campaign học tập → không tính EXP/stats
+        // tutorialMode=1 = chế độ chơi thật (Solo/competitive) → tính EXP/stats
         Integer tm = scenario.getTutorialMode();
-        session.setTutorialMode(tm != null && tm == 1);
+        boolean isTutorialCampaign = (tm == null || tm == 0);
+        session.setTutorialMode(isTutorialCampaign);
         trainingSessionRepository.save(session);
 
         List<EmailDecision> emailDecisions = request.emailDecisions() == null ? List.of() : request.emailDecisions();
@@ -371,12 +374,32 @@ public class GameplayService {
             progress.setScenarioCompleted(true);
         }
 
-        // EXP = điểm phiên (server); mỗi lần submit đều cộng/trừ, không chặn replay. Bỏ qua finalScore client nếu lệch server.
-        int expDelta = serverAdjustedScore;
-        int newTotalExp = Math.max(0, user.getTotalExp() + expDelta);
-        user.setTotalExp(newTotalExp);
-        user.setLevel(calculateLevelFromExp(newTotalExp));
-        userRepository.save(user);
+        // Tutorial mode: không tính EXP và không cập nhật thống kê user.
+        boolean isTutorial = session.isTutorialMode();
+        int expDelta = isTutorial ? 0 : serverAdjustedScore;
+        if (!isTutorial) {
+            // EXP = điểm phiên (server); mỗi lần submit đều cộng/trừ, không chặn replay. Bỏ qua finalScore client nếu lệch server.
+            int newTotalExp = Math.max(0, user.getTotalExp() + expDelta);
+            user.setTotalExp(newTotalExp);
+            user.setLevel(calculateLevelFromExp(newTotalExp));
+
+            // Cập nhật thống kê tích lũy của user
+            int sessionDecisionCount = (useEmailDecisions ? emailDecisions.size() : gameplayDecisions.size())
+                    + (isMailOtp ? 1 : 0);
+            int correctInSession = sessionDecisionCount - falsePositive - falseNegative;
+            int prevTotalDecisions = user.getCorrectReports() + user.getTrapClicks();
+            user.setCorrectReports(Math.max(0, user.getCorrectReports() + correctInSession));
+            user.setTrapClicks(Math.max(0, user.getTrapClicks() + falsePositive + falseNegative));
+            if (avgDecisionTime > 0) {
+                float prevAvg = user.getAvgResponseTime();
+                int totalCount = prevTotalDecisions + sessionDecisionCount;
+                float newAvg = totalCount > 0
+                        ? (prevAvg * prevTotalDecisions + avgDecisionTime * sessionDecisionCount) / totalCount
+                        : avgDecisionTime;
+                user.setAvgResponseTime(newAvg);
+            }
+            userRepository.save(user);
+        }
 
         int earnedExp = expDelta;
 

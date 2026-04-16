@@ -128,7 +128,7 @@ export default function AdminScenariosPage() {
     <AdminLayout>
       <div className="max-w-6xl">
         <div className="mb-6">
-          <h1 className="text-2xl font-extrabold tracking-tight">Quản lý Scenarios</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight" style={{ color: '#f1f5f9' }}>Quản lý Scenarios</h1>
           <p className="mt-2 text-sm text-slate-300">
             CRUD Scenario (campaign) cho luồng chơi.
           </p>
