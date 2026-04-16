@@ -109,7 +109,37 @@ public class DataInitializer implements CommandLineRunner {
     }
 
     private List<Scenario> seedFlowScenarios() {
-        if (scenarioRepository.count() > 0) return scenarioRepository.findAll();
+        // DB có thể đã được seed từ trước (khác bộ dữ liệu của file này).
+        // Nếu return sớm theo count()>0 thì sẽ không bao giờ insert thêm "SOLO_MIXED",
+        // dẫn tới frontend không tìm thấy chế độ chơi đơn.
+        List<Scenario> existing = new ArrayList<>(scenarioRepository.findAll());
+
+        if (!existing.isEmpty()) {
+            Scenario soloMixed = existing.stream()
+                    .filter(s -> s != null && s.getCategory() != null && "SOLO_MIXED".equalsIgnoreCase(s.getCategory()))
+                    .findFirst()
+                    .orElse(null);
+
+            if (soloMixed == null) {
+                Scenario solo = createScenario(
+                        "Chế độ Chơi đơn: Thử thách Hỗn hợp",
+                        "SOLO_MIXED",
+                        "Hard",
+                        "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=1200&q=80",
+                        "Năm mươi tình huống thám tử hòm thư: trộn mail, file, web, OTP và Zalo — điểm phiên cộng trừ EXP mỗi lần chơi.",
+                        5000,
+                        1
+                );
+                existing.add(scenarioRepository.save(solo));
+            } else {
+                Integer tm = soloMixed.getTutorialMode();
+                if (tm == null || tm != 1) {
+                    soloMixed.setTutorialMode(1);
+                    scenarioRepository.save(soloMixed);
+                }
+            }
+            return existing;
+        }
 
         List<Scenario> scenarios = new ArrayList<>();
         scenarios.add(createScenario("Chiến dịch 1: Nhập môn Phishing", "MAIL_STANDARD", "Easy", "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1200&q=80", "Chiến dịch nhập môn giúp nhận diện phishing qua người gửi, nội dung và dấu hiệu thao túng tâm lý.", 500, 1));
@@ -118,7 +148,7 @@ public class DataInitializer implements CommandLineRunner {
         scenarios.add(createScenario("Chiến dịch 4: Chiếm đoạt OTP", "MAIL_OTP", "Hard", "https://images.unsplash.com/photo-1563013544-824ae1b704d3?auto=format&fit=crop&w=1200&q=80", "Mô phỏng các kịch bản social engineering nhằm đánh cắp mã OTP qua email và trang xác minh giả.", 1200, 1));
         scenarios.add(createScenario("Chiến dịch 5: Đặc vụ điều tra số", "MAIL_ZALO", "Hard", "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=80", "Đối chiếu mâu thuẫn giữa Email, Zalo và quy trình SOP nội bộ để ra quyết định chính xác.", 1500, 1));
         scenarios.add(createScenario("Chiến dịch 6: Hỗn hợp đa bẫy", "MIXED_INBOX", "Hard", "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=1200&q=80", "Một phiên inbox chứa nhiều kiểu câu hỏi trộn lẫn: mail thường, file đính kèm, web trap, OTP và xác minh Zalo.", 1800, 0));
-        scenarios.add(createScenario("Chế độ Chơi đơn: Thử thách Hỗn hợp", "SOLO_MIXED", "Hard", "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=1200&q=80", "Năm mươi tình huống thám tử hòm thư: trộn mail, file, web, OTP và Zalo — điểm phiên cộng trừ EXP mỗi lần chơi.", 5000, 0));
+        scenarios.add(createScenario("Chế độ Chơi đơn: Thử thách Hỗn hợp", "SOLO_MIXED", "Hard", "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=1200&q=80", "Năm mươi tình huống thám tử hòm thư: trộn mail, file, web, OTP và Zalo — điểm phiên cộng trừ EXP mỗi lần chơi.", 5000, 1));
         return scenarioRepository.saveAll(scenarios);
     }
 
@@ -136,6 +166,15 @@ public class DataInitializer implements CommandLineRunner {
 
     private void seedFlowSteps(List<Scenario> scenarios) {
         if (scenarios.size() < 5) return;
+
+        // Nếu DB đang dùng bộ campaign khác (không phải MAIL_STANDARD/MAIL_FILE/...), đừng seed đè.
+        // Chỉ cần đảm bảo SOLO_MIXED có step để vào được "Chơi đơn".
+        boolean hasMailStandard = scenarios.stream()
+                .anyMatch(s -> s != null && s.getCategory() != null && "MAIL_STANDARD".equalsIgnoreCase(s.getCategory()));
+        if (!hasMailStandard) {
+            ensureSoloMixedStep(scenarios);
+            return;
+        }
 
         upsertStep(scenarios.get(0), 1, "MAIL_STANDARD", "{\"scenarioType\":\"MAIL_STANDARD\",\"title\":\"Bài tập 1: Soi địa chỉ người gửi\",\"threatLevel\":1}", "REPORT", "VERIFIED", "Tập trung kiểm tra domain người gửi và các dấu hiệu typosquatting.");
         upsertStep(scenarios.get(0), 2, "MAIL_STANDARD", "{\"scenarioType\":\"MAIL_STANDARD\",\"title\":\"Bài tập 2: Phân biệt thông báo và mail rác\",\"threatLevel\":1}", "REPORT", "VERIFIED", "Đánh giá ngữ cảnh công sở để phân biệt thông báo thật và spam quảng cáo.");
@@ -265,6 +304,25 @@ public class DataInitializer implements CommandLineRunner {
                     "Đọc kỹ policy, đối chiếu từng kênh; điểm phiên được cộng trừ vào EXP tài khoản."
             );
         }
+        ensureSoloMixedStep(scenarios);
+    }
+
+    private void ensureSoloMixedStep(List<Scenario> scenarios) {
+        Scenario soloMixed = scenarios.stream()
+                .filter(s -> s != null && s.getCategory() != null && "SOLO_MIXED".equalsIgnoreCase(s.getCategory()))
+                .findFirst()
+                .orElse(null);
+        if (soloMixed == null) return;
+        if (scenarioStepRepository.countByScenarioId(soloMixed.getId()) > 0) return;
+        upsertStep(
+                soloMixed,
+                1,
+                "MIXED_INBOX",
+                buildSoloMixedStepContent(),
+                "INPUT",
+                "REPORT",
+                "Đọc kỹ policy, đối chiếu từng kênh; điểm phiên được cộng trừ vào EXP tài khoản."
+        );
     }
 
     private String buildFlow5Content(String title, int threatLevel, String caseMapJson) {
