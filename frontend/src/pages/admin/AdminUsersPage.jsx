@@ -57,7 +57,7 @@ export default function AdminUsersPage() {
     <AdminLayout>
       <div className="max-w-6xl">
         <div className="mb-6">
-          <h1 className="text-2xl font-extrabold tracking-tight">Quản lý Users</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight" style={{ color: '#f1f5f9' }}>Quản lý Users</h1>
           <p className="mt-2 text-sm text-slate-300">
             Xem danh sách user và đổi role.
           </p>
